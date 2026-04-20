@@ -1,4 +1,8 @@
 .venv/
+{% if use_poetry %}
+# Poetry — commit poetry.lock for reproducibility; ignore cache
+.poetry/
+{% endif %}
 __pycache__/
 *.pyc
 *.pyo

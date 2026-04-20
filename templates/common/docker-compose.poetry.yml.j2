@@ -1,0 +1,23 @@
+version: "3.9"
+
+# docker-compose.yml — local development only (Poetry variant)
+# Production/dev deployments on Carlos are managed by ci_cd CLI
+
+services:
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - APP_ENV=local
+{% for flag in flags %}
+      - FEATURE_{{ flag.upper() }}=false
+{% endfor %}
+    volumes:
+      - .:/app
+    command: >
+{% if primary_stack == "django" %}
+      python manage.py runserver 0.0.0.0:8000
+{% else %}
+      python main.py
+{% endif %}

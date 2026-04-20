@@ -127,16 +127,22 @@ def cli():
 @click.option("--stack", default="python", help="Tech stack (e.g. 'django python sqlite')")
 @click.option("--description", default="", help="Project description")
 @click.option("--flag", "flags", multiple=True, help="Initial feature flags (repeatable)")
-def init(name: str, stack: str, description: str, flags: tuple) -> None:
+@click.option("--poetry", "use_poetry", is_flag=True, default=False,
+              help="Use Poetry for dependency management instead of pip+requirements.txt")
+def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool) -> None:
     """Initialize a new project with git, venv, LSP, hooks, and Docker setup."""
     project_dir = PROJECTS_ROOT / name
     if project_dir.exists():
         raise click.ClickException(f"{project_dir} already exists")
 
+    # auto-detect poetry from stack string
+    if "poetry" in stack.lower():
+        use_poetry = True
+
     primary_stack = detect_stack(stack)
     today = date.today().isoformat()
     ctx = dict(name=name, stack=stack, primary_stack=primary_stack,
-               description=description, today=today,
+               description=description, today=today, use_poetry=use_poetry,
                flags={f: False for f in flags})
 
     click.echo(f"Initializing {name} ({primary_stack}) at {project_dir}")
@@ -150,8 +156,8 @@ def init(name: str, stack: str, description: str, flags: tuple) -> None:
     _write(project_dir / ".gitignore", render("common/.gitignore.j2", **ctx))
     _write(project_dir / "feature_flags.yaml",
            render("common/feature_flags.yaml.j2", **ctx))
-    _write(project_dir / "docker-compose.yml",
-           render("common/docker-compose.yml.j2", **ctx))
+    compose_tpl = "common/docker-compose.poetry.yml.j2" if use_poetry else "common/docker-compose.yml.j2"
+    _write(project_dir / "docker-compose.yml", render(compose_tpl, **ctx))
     _write(project_dir / "Makefile", render("common/Makefile.j2", **ctx))
 
     # --- Stack-specific files ---
@@ -177,18 +183,28 @@ def init(name: str, stack: str, description: str, flags: tuple) -> None:
     subprocess.run(["git", "config", "user.email", "dev@albert.local"], cwd=project_dir, check=True)
     _install_hooks(project_dir, primary_stack)
 
-    # --- venv ---
-    click.echo("  Creating .venv...")
-    subprocess.run([sys.executable, "-m", "venv", str(project_dir / ".venv")], check=True)
-    pip = project_dir / ".venv" / "bin" / "pip"
-    subprocess.run([str(pip), "install", "--upgrade", "pip", "-q"], check=True)
-    req = project_dir / "requirements.txt"
-    if req.exists():
-        subprocess.run([str(pip), "install", "-r", str(req), "-q"], check=True)
+    # --- venv / deps ---
+    if use_poetry:
+        click.echo("  Installing deps with Poetry...")
+        poetry_bin = _find_poetry()
+        # Keep venv inside the project for reproducibility
+        subprocess.run([poetry_bin, "config", "virtualenvs.in-project", "true",
+                        "--local"], cwd=project_dir, check=True)
+        subprocess.run([poetry_bin, "install"], cwd=project_dir, check=True)
+        ruff_bin = str(project_dir / ".venv" / "bin" / "ruff")
+    else:
+        click.echo("  Creating .venv...")
+        subprocess.run([sys.executable, "-m", "venv", str(project_dir / ".venv")], check=True)
+        pip = project_dir / ".venv" / "bin" / "pip"
+        subprocess.run([str(pip), "install", "--upgrade", "pip", "-q"], check=True)
+        req = project_dir / "requirements.txt"
+        if req.exists():
+            subprocess.run([str(pip), "install", "-r", str(req), "-q"], check=True)
+        venv_ruff = project_dir / ".venv" / "bin" / "ruff"
+        ruff_bin = str(venv_ruff) if venv_ruff.exists() else shutil.which("ruff") or "ruff"
 
-    # --- Format code before commit so pre-commit hook passes ---
-    venv_ruff = project_dir / ".venv" / "bin" / "ruff"
-    ruff_bin = str(venv_ruff) if venv_ruff.exists() else shutil.which("ruff") or "ruff"
+    # --- Lint-fix + format before commit so pre-commit hook passes ---
+    subprocess.run([ruff_bin, "check", "--fix", "--quiet", "."], cwd=project_dir, capture_output=True)
     subprocess.run([ruff_bin, "format", "."], cwd=project_dir, capture_output=True)
 
     # --- Initial commit ---
@@ -211,11 +227,29 @@ def init(name: str, stack: str, description: str, flags: tuple) -> None:
 
     click.echo(f"\n✓ {name} ready at {project_dir}")
     click.echo(f"  Stack:  {primary_stack}")
+    click.echo(f"  Deps:   {'Poetry (pyproject.toml)' if use_poetry else 'pip (requirements.txt)'}")
     click.echo(f"  Flags:  {', '.join(flags) if flags else 'none'}")
     click.echo(f"  venv:   source .venv/bin/activate")
     click.echo(f"\nNext steps:")
     click.echo(f"  ci_cd feature start {name} <flag>")
     click.echo(f"  ci_cd feature activate-dev {name} <flag>")
+
+
+def _find_poetry() -> str:
+    """Locate the poetry binary."""
+    candidates = [
+        shutil.which("poetry"),
+        str(Path.home() / ".local" / "bin" / "poetry"),
+        str(Path.home() / ".poetry" / "bin" / "poetry"),
+        str(Path.home() / ".poetry-venv" / "bin" / "poetry"),
+        "/usr/local/bin/poetry",
+    ]
+    for c in candidates:
+        if c and Path(c).exists():
+            return c
+    raise click.ClickException(
+        "poetry not found. Install: python3 -m venv ~/.poetry-venv && ~/.poetry-venv/bin/pip install poetry"
+    )
 
 
 def _write(path: Path, content: str) -> None:
@@ -243,10 +277,15 @@ def _init_python(project_dir: Path, ctx: dict) -> None:
 def _init_django(project_dir: Path, ctx: dict) -> None:
     name = ctx["name"]
     app = name.lower().replace("-", "_")
+    use_poetry = ctx.get("use_poetry", False)
     ctx = {**ctx, "app": app}
 
-    _write(project_dir / "requirements.txt", render("django/requirements.txt.j2", **ctx))
-    _write(project_dir / "Dockerfile", render("django/Dockerfile.j2", **ctx))
+    if use_poetry:
+        _write(project_dir / "pyproject.toml", render("common/pyproject.toml.j2", **ctx))
+        _write(project_dir / "Dockerfile", render("django/Dockerfile.poetry.j2", **ctx))
+    else:
+        _write(project_dir / "requirements.txt", render("django/requirements.txt.j2", **ctx))
+        _write(project_dir / "Dockerfile", render("django/Dockerfile.j2", **ctx))
     _write(project_dir / "manage.py", render("django/manage.py.j2", **ctx))
     _write(project_dir / app / "__init__.py", "")
     _write(project_dir / app / "settings.py", render("django/settings.py.j2", **ctx))
@@ -260,7 +299,9 @@ def _init_django(project_dir: Path, ctx: dict) -> None:
     _write(project_dir / "tests" / "test_views.py", render("django/test_views.py.j2", **ctx))
     _write(project_dir / "tests" / "features" / "flags.feature",
            render("django/flags.feature.j2", **ctx))
-    _write(project_dir / "pytest.ini", render("django/pytest.ini.j2", **ctx))
+    # pyproject.toml already contains [tool.pytest.ini_options] for Poetry projects
+    if not use_poetry:
+        _write(project_dir / "pytest.ini", render("django/pytest.ini.j2", **ctx))
 
 
 def _init_flask(project_dir: Path, ctx: dict) -> None:
