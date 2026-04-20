@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{% raw %}{{ project }}{% endraw %}</title>
+  <style>
+    body { font-family: monospace; max-width: 600px; margin: 4rem auto; padding: 0 1rem; }
+    .flag { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; }
+    .badge { padding: 0.2rem 0.5rem; border-radius: 3px; font-weight: bold; }
+    .on  { background: #dcfce7; color: #16a34a; }
+    .off { background: #fee2e2; color: #dc2626; }
+  </style>
+</head>
+<body>
+  <h1>{% raw %}{{ project }}{% endraw %}</h1>
+  <p>Hello, World!</p>
+
+  <h2>Feature Flags</h2>
+  {% raw %}{% for name, enabled in flags.items %}{% endraw %}
+  <div class="flag">
+    <span class="badge {% raw %}{% if enabled %}on{% else %}off{% endif %}{% endraw %}">
+      {% raw %}{% if enabled %}ON{% else %}OFF{% endif %}{% endraw %}
+    </span>
+    <code>{% raw %}{{ name }}{% endraw %}</code>
+  </div>
+  {% raw %}{% endfor %}{% endraw %}
+
+  <p><a href="/health/">health check</a></p>
+</body>
+</html>

@@ -1,0 +1,38 @@
+# {{ name }} — OpenHands Agent Instructions
+
+This project uses **Trunk-Based Development** with feature flags.
+
+## Key Files
+
+- `feature_flags.yaml` — feature flag definitions
+- `CLAUDE.md` — coding directives
+- `tests/features/` — BDD scenarios (Gherkin)
+- `Makefile` — common tasks
+
+## Workflow
+
+Before starting any feature work:
+1. Check if a feature flag for this feature already exists.
+2. If not, all new user-facing behavior must go behind a flag.
+3. Write BDD scenario first, then unit test, then implementation.
+
+## Running Tests
+
+```bash
+make test
+```
+
+## Feature Flag Usage
+
+```python
+from {{ name.lower().replace('-', '_') }}.flags import feature_enabled
+
+# Use this pattern everywhere — no direct env checks
+if feature_enabled("feature_name"):
+    ...
+```
+
+## Deployment (hands off — use ci_cd tool)
+
+The agent should NOT run docker or terraform commands directly.
+Deployment is managed by `ci_cd` CLI in `/home/claude/albert/ci_cd/`.

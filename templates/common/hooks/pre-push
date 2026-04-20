@@ -1,0 +1,9 @@
+#!/bin/sh
+# Pre-push: run full test suite
+set -e
+
+if [ -f "manage.py" ]; then
+  python manage.py test --verbosity=0 2>/dev/null || pytest tests/ -q
+elif [ -d "tests" ]; then
+  pytest tests/ -q
+fi

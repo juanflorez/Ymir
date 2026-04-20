@@ -1,0 +1,16 @@
+"""{{ name }} — {{ description or "Hello World" }}"""
+from .flags import feature_enabled  # noqa: F401 — import pattern, extend as needed
+
+
+def main():
+    print("Hello, World! — {{ name }}")
+{% for flag in flags %}
+    if feature_enabled("{{ flag }}"):
+        print("Feature '{{ flag }}' is ON")
+    else:
+        print("Feature '{{ flag }}' is OFF")
+{% endfor %}
+
+
+if __name__ == "__main__":
+    main()

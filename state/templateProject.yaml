@@ -1,0 +1,16 @@
+created: '2026-04-20'
+description: Good to test feature deployment, and test.
+dev_envs: []
+feature_flags:
+  testlabel:
+    created: '2026-04-20'
+    description: testlabel
+name: templateProject
+prod:
+  container: templateproject-prod
+  deployed: false
+  flags:
+    testlabel: false
+  port: null
+project_dir: /home/claude/albert/projects/templateProject
+stack: django

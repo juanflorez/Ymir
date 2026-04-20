@@ -1,0 +1,19 @@
+from django.http import HttpResponse
+from django.shortcuts import render
+from .flags import feature_enabled
+
+
+def index(request):
+    context = {
+        "project": "{{ name }}",
+        "flags": {
+{% for flag in flags %}
+            "{{ flag }}": feature_enabled("{{ flag }}"),
+{% endfor %}
+        },
+    }
+    return render(request, "index.html", context)
+
+
+def health(request):
+    return HttpResponse("ok", content_type="text/plain")

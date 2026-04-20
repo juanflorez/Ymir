@@ -1,0 +1,18 @@
+import os
+import pytest
+
+
+{% for flag in flags %}
+def test_{{ flag }}_default_off():
+    os.environ.pop("FEATURE_{{ flag.upper() }}", None)
+    from main import feature_enabled
+    assert feature_enabled("{{ flag }}") is False
+
+
+def test_{{ flag }}_on_when_set():
+    os.environ["FEATURE_{{ flag.upper() }}"] = "true"
+    from main import feature_enabled
+    assert feature_enabled("{{ flag }}") is True
+    del os.environ["FEATURE_{{ flag.upper() }}"]
+
+{% endfor %}

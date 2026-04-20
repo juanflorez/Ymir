@@ -1,0 +1,8 @@
+output "app_url" {
+  description = "Application URL (Tailscale)"
+  value       = "http://100.122.124.15:${var.port}"
+}
+
+output "container_name" {
+  value = docker_container.app.name
+}

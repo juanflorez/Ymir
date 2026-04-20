@@ -1,0 +1,62 @@
+# {{ name }}
+
+{{ description or "Project bootstrapped by ci_cd." }}
+
+**Stack:** {{ stack }}
+**Created:** {{ today }}
+
+## Quick Start
+
+```bash
+source .venv/bin/activate
+{% if primary_stack == "django" -%}
+python manage.py migrate
+python manage.py runserver
+{% else -%}
+python main.py
+{% endif %}
+```
+
+## Feature Flags
+
+Flags are defined in `feature_flags.yaml` and injected as environment variables at deploy time.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+{% for flag in flags -%}
+| `{{ flag }}` | OFF | — |
+{% else -%}
+| — | — | No flags yet. Run `ci_cd feature start {{ name }} <flag>` |
+{% endfor %}
+
+To activate a flag locally:
+```bash
+export FEATURE_<FLAG>=true
+```
+
+## Deployment
+
+```bash
+# Start a feature
+ci_cd feature start {{ name }} <flag>
+
+# Test in dev (flag ON)
+ci_cd feature activate-dev {{ name }} <flag>
+
+# Dark launch to prod (flag OFF)
+ci_cd deploy prod {{ name }} <flag>
+
+# Release to users
+ci_cd release {{ name }} <flag>
+
+# Rollback
+ci_cd deactivate-prod {{ name }} <flag>
+```
+
+## Development Methodology
+
+See `../../ci_cd/TBD_PRACTICES.md` for TBD/TDD/BDD guidelines.
+
+- **TBD:** One branch (`main`). Feature flags hide incomplete work.
+- **TDD:** Red → Green → Refactor.
+- **BDD:** Gherkin scenarios in `tests/features/`.

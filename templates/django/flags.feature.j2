@@ -1,0 +1,17 @@
+Feature: Feature Flags for {{ name }}
+
+  Background:
+    Given the application is running
+
+{% for flag in flags %}
+  Scenario: {{ flag }} is OFF by default
+    Given the feature flag "{{ flag }}" is not set
+    When I visit the homepage
+    Then I see "{{ flag }}" labeled as "OFF"
+
+  Scenario: {{ flag }} can be enabled
+    Given the feature flag "{{ flag }}" is enabled
+    When I visit the homepage
+    Then I see "{{ flag }}" labeled as "ON"
+
+{% endfor %}

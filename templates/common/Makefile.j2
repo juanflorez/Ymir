@@ -1,0 +1,39 @@
+.PHONY: test lint fmt run dev-up dev-down
+
+{% if primary_stack == "django" %}
+run:
+	python manage.py runserver
+
+migrate:
+	python manage.py migrate
+
+test:
+	pytest tests/ -v
+
+lint:
+	ruff check .
+
+fmt:
+	ruff format .
+
+shell:
+	python manage.py shell
+{% else %}
+run:
+	python main.py
+
+test:
+	pytest tests/ -v
+
+lint:
+	ruff check .
+
+fmt:
+	ruff format .
+{% endif %}
+
+dev-up:
+	docker compose up -d
+
+dev-down:
+	docker compose down

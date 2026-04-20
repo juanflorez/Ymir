@@ -1,0 +1,7 @@
+image_tag      = "{{ name.lower() }}:prod-latest"
+container_name = "{{ name.lower() }}-prod"
+port           = 8001
+environment    = "prod"
+{% for flag in flags %}
+feature_{{ flag }} = false
+{% endfor %}

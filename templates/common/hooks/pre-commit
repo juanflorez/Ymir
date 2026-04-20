@@ -1,0 +1,8 @@
+#!/bin/sh
+# Pre-commit: lint + format check
+set -e
+
+if command -v ruff >/dev/null 2>&1; then
+  ruff check . --quiet
+  ruff format . --check --quiet
+fi

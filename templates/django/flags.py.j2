@@ -1,0 +1,7 @@
+"""Feature flag helpers — read from environment variables."""
+import os
+
+
+def feature_enabled(flag: str) -> bool:
+    """Return True if FEATURE_<FLAG> env var is set to 'true'."""
+    return os.environ.get(f"FEATURE_{flag.upper()}", "false").lower() == "true"

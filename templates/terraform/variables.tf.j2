@@ -1,0 +1,44 @@
+variable "carlos_host" {
+  description = "Carlos server hostname or IP"
+  default     = "65.109.98.235"
+}
+
+variable "carlos_user" {
+  description = "SSH user on Carlos"
+  default     = "root"
+}
+
+variable "carlos_ssh_key" {
+  description = "Path to SSH private key for Carlos"
+  default     = "~/carlos/keys/carlos.pem"
+}
+
+variable "project_dir" {
+  description = "Absolute path to project directory on Albert"
+  default     = "{{ project_dir }}"
+}
+
+variable "image_tag" {
+  description = "Docker image tag"
+}
+
+variable "container_name" {
+  description = "Docker container name"
+}
+
+variable "port" {
+  description = "Host port to expose"
+  type        = number
+}
+
+variable "environment" {
+  description = "Environment name (dev, prod)"
+}
+
+{% for flag in flags %}
+variable "feature_{{ flag }}" {
+  description = "Feature flag: {{ flag }}"
+  type        = bool
+  default     = false
+}
+{% endfor %}

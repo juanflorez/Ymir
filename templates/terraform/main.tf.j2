@@ -1,0 +1,67 @@
+# Terraform config for {{ name }}
+# Manages Docker containers on Carlos (Hetzner)
+#
+# Prerequisites:
+#   1. terraform init
+#   2. SSH access to Carlos: export TF_VAR_carlos_ssh_key=<path>
+#   3. Docker installed on Carlos
+#
+# Usage:
+#   terraform apply -var-file=dev.tfvars    # deploy dev
+#   terraform apply -var-file=prod.tfvars   # deploy prod
+#   terraform destroy -var-file=dev.tfvars  # remove dev
+
+terraform {
+  required_providers {
+    docker = {
+      source  = "kreuzwerker/docker"
+      version = "~> 3.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+  }
+}
+
+# Docker provider connects to Carlos via SSH tunnel
+provider "docker" {
+  host     = "ssh://${var.carlos_user}@${var.carlos_host}:22"
+  ssh_opts = ["-i", var.carlos_ssh_key, "-o", "StrictHostKeyChecking=no"]
+}
+
+# Build and push image to Carlos before creating container
+resource "null_resource" "push_image" {
+  triggers = {
+    image_tag = var.image_tag
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      docker build -t ${var.image_tag} ${var.project_dir}
+      docker save ${var.image_tag} | ssh -i ${var.carlos_ssh_key} \
+        -o StrictHostKeyChecking=no ${var.carlos_user}@${var.carlos_host} docker load
+    EOT
+  }
+}
+
+resource "docker_container" "app" {
+  depends_on = [null_resource.push_image]
+
+  name  = var.container_name
+  image = var.image_tag
+
+  ports {
+    internal = 8000
+    external = var.port
+  }
+
+  env = concat(
+    ["APP_ENV=${var.environment}"],
+{% for flag in flags %}
+    ["FEATURE_{{ flag.upper() }}=${var.feature_{{ flag }}}"],
+{% endfor %}
+  )
+
+  restart = "unless-stopped"
+}

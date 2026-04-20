@@ -1,0 +1,40 @@
+import os
+import pytest
+
+
+@pytest.fixture
+def client(db):
+    from django.test import Client
+    return Client()
+
+
+def test_health(client):
+    response = client.get("/health/")
+    assert response.status_code == 200
+    assert response.content == b"ok"
+
+
+def test_index_returns_200(client):
+    response = client.get("/")
+    assert response.status_code == 200
+
+
+{% for flag in flags %}
+def test_{{ flag }}_off_by_default(client):
+    """{{ flag }} should render OFF when env var is not set."""
+    os.environ.pop("FEATURE_{{ flag.upper() }}", None)
+    response = client.get("/")
+    assert b"{{ flag }}" in response.content
+    assert b"OFF" in response.content
+
+
+def test_{{ flag }}_on_when_env_set(client):
+    """{{ flag }} should render ON when FEATURE_{{ flag.upper() }}=true."""
+    os.environ["FEATURE_{{ flag.upper() }}"] = "true"
+    try:
+        response = client.get("/")
+        assert b"ON" in response.content
+    finally:
+        del os.environ["FEATURE_{{ flag.upper() }}"]
+
+{% endfor %}

@@ -1,0 +1,57 @@
+# {{ name }} — Agent Directives
+
+## Project Context
+
+- **Name:** {{ name }}
+- **Stack:** {{ stack }}
+- **Description:** {{ description or "See README.md" }}
+- **Methodology:** TBD (Trunk-Based Development) + TDD + BDD
+
+## Core Rules
+
+1. **One branch (`main`)**. Never create long-lived feature branches.
+2. **Feature flags** hide incomplete work. See `feature_flags.yaml`.
+3. **TDD cycle**: write a failing test first, then make it pass, then refactor.
+4. **BDD scenarios** live in `tests/features/` — they describe behavior, not implementation.
+5. Every commit must leave the repo deployable.
+
+## Feature Flag Pattern
+
+```python
+from {{ name.lower().replace('-', '_') }}.flags import feature_enabled
+
+if feature_enabled("my_feature"):
+    # new path
+else:
+    # existing path
+```
+
+Never gate features on environment strings (`if env == "prod"`). Always use flags.
+
+## Testing
+
+```bash
+{% if primary_stack == "django" -%}
+python manage.py test          # Django test runner
+pytest tests/                  # or with pytest
+{% else -%}
+pytest tests/
+{% endif %}
+```
+
+## Commit Convention
+
+```
+feat: short description      # new feature (behind a flag)
+fix: short description       # bug fix
+test: short description      # adding/fixing tests
+refactor: short description  # no behavior change
+chore: short description     # tooling, deps, config
+```
+
+## Do Not
+
+- Merge unfinished features directly visible to users — use flags.
+- Create branches named after features — commit to main with flags.
+- Skip tests when refactoring.
+- Add error handling for impossible scenarios.
