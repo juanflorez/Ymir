@@ -19,7 +19,7 @@ from jinja2 import Environment, FileSystemLoader
 # Config
 # ---------------------------------------------------------------------------
 
-PROJECTS_ROOT = Path(os.environ.get("PROJECTS_ROOT", "/home/claude/albert/projects"))
+PROJECTS_ROOT = Path(os.environ.get("PROJECTS_ROOT", "/home/juan/openhands/workspace"))
 CI_CD_ROOT = Path(__file__).parent
 TEMPLATES_DIR = CI_CD_ROOT / "templates"
 STATE_DIR = CI_CD_ROOT / "state"
