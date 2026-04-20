@@ -1,0 +1,18 @@
+# Local config — copy ymir.cfg.example → ymir.cfg and fill in your values
+ymir.cfg
+
+# Project state (local deployment state, not for version control)
+state/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.pytest_cache/
+
+# Editor
+.idea/
+.vscode/
+*.swp
