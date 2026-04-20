@@ -16,11 +16,30 @@ Before starting any feature work:
 2. If not, all new user-facing behavior must go behind a flag.
 3. Write BDD scenario first, then unit test, then implementation.
 
-## Running Tests
+## Running Tests (OpenHands container environment)
+
+The project uses Poetry for dependency management. Inside the OpenHands container,
+the project venv is not pre-activated. Set up the environment once per session:
 
 ```bash
-make test
+# Install deps into the container's Python (do this first)
+pip install -q Django pytest pytest-django pytest-bdd ruff
+
+# Set Django settings module
+export DJANGO_SETTINGS_MODULE={{ name.lower().replace('-', '_') }}.settings
+
+# Run tests
+python -m pytest tests/ -v
+
+# Run a specific test
+python -m pytest tests/test_views.py::test_name -v
+
+# Django management commands
+python manage.py migrate
+python manage.py shell
 ```
+
+Always use `python -m pytest` (not `.venv/bin/pytest`) inside the container.
 
 ## Feature Flag Usage
 
@@ -32,7 +51,20 @@ if feature_enabled("feature_name"):
     ...
 ```
 
+## Adding a Feature Flag
+
+Edit `feature_flags.yaml`:
+```yaml
+flags:
+  my_flag:
+    description: "My new feature"
+    created: "YYYY-MM-DD"
+    environments:
+      dev: false
+      prod: false
+```
+
 ## Deployment (hands off — use ci_cd tool)
 
 The agent should NOT run docker or terraform commands directly.
-Deployment is managed by `ci_cd` CLI in `/home/claude/albert/ci_cd/`.
+Deployment is managed by `ci_cd` CLI on Albert at `~/ci_cd/`.
