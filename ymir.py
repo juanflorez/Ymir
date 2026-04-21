@@ -353,6 +353,11 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
     subprocess.run(["git", "init", "-b", "main"], cwd=project_dir, check=True)
     subprocess.run(["git", "config", "user.name", "dev"], cwd=project_dir, check=True)
     subprocess.run(["git", "config", "user.email", "dev@localhost"], cwd=project_dir, check=True)
+    if GITHUB_ORG:
+        remote_url = f"https://github.com/{GITHUB_ORG}/{name}.git"
+        subprocess.run(["git", "remote", "add", "origin", remote_url],
+                       cwd=project_dir, check=True)
+        click.echo(f"  Remote: {remote_url}")
     _install_hooks(project_dir, primary_stack)
 
     # venv / deps
