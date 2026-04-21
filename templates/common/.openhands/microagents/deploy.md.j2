@@ -11,6 +11,9 @@ triggers:
 - activate flag
 - deactivate flag
 - dark launch
+- create flag
+- delete flag
+- add flag
 ---
 
 # Deploying {{ name }}
@@ -28,8 +31,14 @@ python3 .ymir/deploy.py dev
 ## Feature flag lifecycle
 
 ```bash
-# See current state
+# See current state (flags, deploy status)
 python3 .ymir/deploy.py status
+
+# Create a new flag
+python3 .ymir/deploy.py flag-add <flag> [optional description]
+
+# Delete a flag (removes from feature_flags.yaml + state)
+python3 .ymir/deploy.py flag-delete <flag>
 
 # Turn a flag ON in dev (to test the feature)
 python3 .ymir/deploy.py activate <flag>
@@ -37,15 +46,25 @@ python3 .ymir/deploy.py activate <flag>
 # Turn a flag OFF in dev
 python3 .ymir/deploy.py deactivate <flag>
 
-# Dark-launch to prod (code ships, flags stay OFF)
+# Dark-launch to prod (code ships, all flags stay OFF)
 python3 .ymir/deploy.py prod
 
-# Release to users (flag ON in prod)
+# Release to users (flag ON in prod, redeploys)
 python3 .ymir/deploy.py release <flag>
 
-# Rollback (flag OFF in prod)
+# Rollback (flag OFF in prod, redeploys)
 python3 .ymir/deploy.py rollback <flag>
 ```
+
+## Full workflow for a new feature
+
+1. `python3 .ymir/deploy.py flag-add my_feature "what it does"`
+2. Write code gated behind the flag, write tests, make them pass
+3. `python3 .ymir/deploy.py activate my_feature` → test on dev
+4. `python3 .ymir/deploy.py prod` → dark launch (flag OFF in prod)
+5. `python3 .ymir/deploy.py release my_feature` → ship to users
+6. (if needed) `python3 .ymir/deploy.py rollback my_feature` → revert
+7. (cleanup) `python3 .ymir/deploy.py flag-delete my_feature` after full adoption
 
 ## Rules
 

@@ -3,13 +3,15 @@
 .ymir/deploy.py — self-contained deploy tool for {{ name }}.
 
 Run from project root:
-  python3 .ymir/deploy.py dev                # build + deploy to dev
-  python3 .ymir/deploy.py prod               # dark-launch to prod (all flags OFF)
-  python3 .ymir/deploy.py release <flag>     # turn flag ON in prod, redeploy
-  python3 .ymir/deploy.py rollback <flag>    # turn flag OFF in prod, redeploy
-  python3 .ymir/deploy.py activate <flag>    # turn flag ON in dev, redeploy
-  python3 .ymir/deploy.py deactivate <flag>  # turn flag OFF in dev, redeploy
-  python3 .ymir/deploy.py status             # show current state + flag values
+  python3 .ymir/deploy.py dev                     # build + deploy to dev
+  python3 .ymir/deploy.py prod                    # dark-launch to prod (all flags OFF)
+  python3 .ymir/deploy.py release <flag>          # turn flag ON in prod, redeploy
+  python3 .ymir/deploy.py rollback <flag>         # turn flag OFF in prod, redeploy
+  python3 .ymir/deploy.py activate <flag>         # turn flag ON in dev, redeploy
+  python3 .ymir/deploy.py deactivate <flag>       # turn flag OFF in dev, redeploy
+  python3 .ymir/deploy.py flag-add <flag> [desc]  # create a new feature flag
+  python3 .ymir/deploy.py flag-delete <flag>      # delete a feature flag
+  python3 .ymir/deploy.py status                  # show current state + flag values
 """
 
 import subprocess
@@ -196,10 +198,51 @@ def do_status(_args):
             print(f"  {flag_name:30s}  dev={dv}  prod={pv}")
 
 
+def do_flag_add(args):
+    if not args:
+        print("Usage: deploy.py flag-add <flag> [description]")
+        sys.exit(1)
+    flag_name = args[0]
+    desc = " ".join(args[1:]) if len(args) > 1 else f"{flag_name} feature"
+    ff_path = ROOT / "feature_flags.yaml"
+    data = yaml.safe_load(ff_path.read_text()) if ff_path.exists() else {}
+    data.setdefault("flags", {})
+    if flag_name in data["flags"]:
+        print(f"✗ flag '{flag_name}' already exists")
+        sys.exit(1)
+    data["flags"][flag_name] = {
+        "description": desc,
+        "created": date.today().isoformat(),
+        "environments": {"dev": False, "prod": False},
+    }
+    ff_path.write_text(yaml.dump(data, default_flow_style=False))
+    print(f"✓ flag '{flag_name}' created (OFF in all envs)")
+
+
+def do_flag_delete(args):
+    if not args:
+        print("Usage: deploy.py flag-delete <flag>")
+        sys.exit(1)
+    flag_name = args[0]
+    ff_path = ROOT / "feature_flags.yaml"
+    data = yaml.safe_load(ff_path.read_text()) if ff_path.exists() else {}
+    if flag_name not in data.get("flags", {}):
+        print(f"✗ flag '{flag_name}' not found. Available: {list(data.get('flags', {}))}")
+        sys.exit(1)
+    del data["flags"][flag_name]
+    ff_path.write_text(yaml.dump(data, default_flow_style=False))
+    s = _state()
+    for env in ("dev_flags", "prod_flags"):
+        s.get(env, {}).pop(flag_name, None)
+    _save(s)
+    print(f"✓ flag '{flag_name}' deleted")
+
+
 CMDS = {
     "dev": do_dev, "prod": do_prod,
     "release": do_release, "rollback": do_rollback,
     "activate": do_activate, "deactivate": do_deactivate,
+    "flag-add": do_flag_add, "flag-delete": do_flag_delete,
     "status": do_status,
 }
 
