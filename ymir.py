@@ -299,6 +299,8 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
         ["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"{name}-ymir"],
         check=True, capture_output=True
     )
+    # 0644 so the OpenHands sandbox (different uid) can read it to copy to /tmp
+    key_path.chmod(0o644)
     if DEPLOY_HOST:
         pub_key = (key_path.with_suffix(".pub")).read_text().strip()
         subprocess.run(
