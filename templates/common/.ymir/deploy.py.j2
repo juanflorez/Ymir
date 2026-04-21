@@ -59,7 +59,10 @@ def _save(s):
 
 def _ssh(cmd, c):
     key = ROOT / c["deploy_key"]
-    key.chmod(0o600)
+    try:
+        key.chmod(0o600)
+    except OSError:
+        pass  # key may be on a read-only mount or owned by another user; proceed anyway
     return subprocess.run(
         ["ssh", "-i", str(key), "-o", "StrictHostKeyChecking=no",
          "-o", "ConnectTimeout=15",
@@ -76,7 +79,7 @@ def _sync(c):
         r = subprocess.run([
             "rsync", "-a", "--delete",
             "--exclude=.venv/", "--exclude=__pycache__/", "--exclude=*.pyc",
-            "--exclude=.git/", "--exclude=.ymir/",
+            "--exclude=.ruff_cache/", "--exclude=.git/", "--exclude=.ymir/",
             "-e", ssh,
             f"{ROOT}/",
             f"{dest}:/tmp/{slug}-build/",
@@ -85,7 +88,7 @@ def _sync(c):
     _ssh(f"rm -rf /tmp/{slug}-build && mkdir -p /tmp/{slug}-build", c)
     tar_cmd = (
         f"tar -C {ROOT} --exclude=./.venv --exclude=./__pycache__ "
-        f"--exclude=./*.pyc --exclude=./.git --exclude=./.ymir -czf - . | "
+        f"--exclude=./*.pyc --exclude=./.ruff_cache --exclude=./.git --exclude=./.ymir -czf - . | "
         f"ssh -i {key} -o StrictHostKeyChecking=no -o ConnectTimeout=15 "
         f"{dest} 'tar -C /tmp/{slug}-build -xzf -'"
     )
