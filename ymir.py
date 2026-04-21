@@ -122,8 +122,31 @@ def detect_stack(stack_str: str) -> str:
 
 
 def next_dev_port(project: str) -> int:
-    state = load_state(project)
-    existing = [e["port"] for e in state.get("dev_envs", [])]
+    """Find the next free dev port — checks local state AND what's live on the deploy server."""
+    existing = set()
+    # Local state across all projects
+    STATE_DIR.mkdir(exist_ok=True)
+    for state_file in STATE_DIR.glob("*.yaml"):
+        s = yaml.safe_load(state_file.read_text()) or {}
+        for env in s.get("dev_envs", []):
+            existing.add(env["port"])
+    # Live ports on deploy server (catches containers managed outside this ymir instance)
+    if DEPLOY_HOST:
+        result = subprocess.run(
+            ["ssh", "-i", DEPLOY_SSH_KEY, "-o", "StrictHostKeyChecking=no",
+             f"{DEPLOY_USER}@{DEPLOY_HOST}",
+             "docker ps --format '{{.Ports}}' 2>/dev/null"],
+            capture_output=True, text=True
+        )
+        for line in result.stdout.splitlines():
+            # Lines look like: 0.0.0.0:8100->8000/tcp
+            for part in line.split(","):
+                part = part.strip()
+                if "->" in part and ":" in part:
+                    try:
+                        existing.add(int(part.split(":")[1].split("->")[0]))
+                    except (ValueError, IndexError):
+                        pass
     port = DEV_PORT_START
     while port in existing:
         port += 1
@@ -145,18 +168,27 @@ def run_ssh(cmd: str, capture: bool = False) -> subprocess.CompletedProcess:
 
 
 def build_and_push_image(project_dir: Path, tag: str) -> None:
-    click.echo(f"  Building image {tag}...")
-    subprocess.run(["docker", "build", "-t", tag, str(project_dir)], check=True)
-    click.echo(f"  Transferring image to deploy server...")
-    save = subprocess.Popen(["docker", "save", tag], stdout=subprocess.PIPE)
-    load = subprocess.run(
-        ["ssh", "-i", DEPLOY_SSH_KEY, "-o", "StrictHostKeyChecking=no",
-         f"{DEPLOY_USER}@{DEPLOY_HOST}", "docker load"],
-        stdin=save.stdout
-    )
-    save.wait()
-    if load.returncode != 0:
-        raise click.ClickException("Failed to load image on deploy server")
+    project_name = tag.split(":")[0]
+    remote_build_dir = f"/tmp/{project_name}-build/"
+
+    click.echo(f"  Syncing {project_dir} to deploy server...")
+    rsync = subprocess.run([
+        "rsync", "-a", "--delete",
+        "--exclude=.venv/",
+        "--exclude=__pycache__/",
+        "--exclude=*.pyc",
+        "--exclude=.git/",
+        "-e", f"ssh -i {DEPLOY_SSH_KEY} -o StrictHostKeyChecking=no",
+        f"{project_dir}/",
+        f"{DEPLOY_USER}@{DEPLOY_HOST}:{remote_build_dir}",
+    ])
+    if rsync.returncode != 0:
+        raise click.ClickException("Failed to sync project to deploy server")
+
+    click.echo(f"  Building image {tag} on deploy server...")
+    build = run_ssh(f"docker build -t {tag} {remote_build_dir} && rm -rf {remote_build_dir}")
+    if build.returncode != 0:
+        raise click.ClickException("Failed to build image on deploy server")
 
 
 def flag_env_vars(flags: dict) -> str:
@@ -538,9 +570,10 @@ def _deploy_production(project: str, state: dict, flag_override: dict = None) ->
     project_dir = Path(state["project_dir"])
     flags = {**state.get("prod", {}).get("flags", {}), **(flag_override or {})}
 
-    port = state.get("prod", {}).get("port") or (DEV_PORT_START - 100)
+    port = state.get("prod", {}).get("port") or next_dev_port(project)
     container = f"{project.lower()}-prod"
     tag = f"{project.lower()}:prod-{date.today().isoformat()}"
+    slug = project.lower()
 
     try:
         build_and_push_image(project_dir, tag)
@@ -550,6 +583,8 @@ def _deploy_production(project: str, state: dict, flag_override: dict = None) ->
                f"-e APP_ENV=prod {env_args} {tag}")
         result = run_ssh(cmd)
         deployed = result.returncode == 0
+        if deployed:
+            _configure_nginx(slug, port)
     except Exception as e:
         click.echo(f"  Warning: deploy failed ({e}). State saved locally.")
         deployed = False
@@ -558,9 +593,39 @@ def _deploy_production(project: str, state: dict, flag_override: dict = None) ->
                           "tag": tag, "deployed": deployed})
     save_state(project, state)
 
-    url = f"{DEPLOY_URL}:{port}" if DEPLOY_URL else f"<deploy_url>:{port}"
+    path = f"/{slug}/"
+    url = f"{DEPLOY_URL}{path}" if DEPLOY_URL else f"<deploy_url>{path}"
     status_str = "live" if deployed else "FAILED (check deploy server)"
     click.echo(f"✓ prod — {url} — {status_str}")
+
+
+def _configure_nginx(slug: str, port: int) -> None:
+    """Write an nginx location block for the project and reload nginx."""
+    nginx_conf = (
+        f"location /{slug}/ {{\n"
+        f"    proxy_pass http://127.0.0.1:{port}/;\n"
+        f"    proxy_set_header Host $host;\n"
+        f"    proxy_set_header X-Real-IP $remote_addr;\n"
+        f"    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n"
+        f"    proxy_set_header X-Forwarded-Proto $scheme;\n"
+        f"}}\n"
+    )
+    setup_cmd = (
+        "mkdir -p /etc/nginx/ymir-locations && "
+        # Ensure the default server includes ymir-locations
+        "grep -q 'ymir-locations' /etc/nginx/sites-enabled/default || "
+        "sed -i '/server_name _;/a\\    include /etc/nginx/ymir-locations/*.conf;' "
+        "/etc/nginx/sites-enabled/default && "
+        f"cat > /etc/nginx/ymir-locations/{slug}-prod.conf << 'NGINXEOF'\n"
+        f"{nginx_conf}"
+        "NGINXEOF\n"
+        "nginx -t && nginx -s reload"
+    )
+    result = run_ssh(setup_cmd)
+    if result.returncode == 0:
+        click.echo(f"  nginx configured for /{slug}/")
+    else:
+        click.echo(f"  Warning: nginx config failed — app reachable on port {port} only")
 
 
 def _redeploy_prod(project: str, state: dict) -> None:
