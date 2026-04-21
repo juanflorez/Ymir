@@ -414,20 +414,25 @@ def feature_deactivate_dev(project: str, flag: str) -> None:
 @click.argument("flag")
 @click.option("--yes", is_flag=True, help="Skip confirmation prompt")
 def feature_remove(project: str, flag: str, yes: bool) -> None:
-    """Remove a feature flag after it has been fully released and cleaned up."""
+    """Promote a feature to permanent — remove the flag once it's confirmed working in prod.
+
+    The feature stays in the codebase; only the flag guard is removed.
+    Make sure you've already deleted all feature_enabled() checks from the code.
+    """
     state = _require_state(project)
     _require_flag(state, flag)
 
     prod_val = state.get("prod", {}).get("flags", {}).get(flag, False)
-    if prod_val:
+    if not prod_val:
         raise click.ClickException(
-            f"Flag '{flag}' is still ON in production. "
-            f"Run 'ymir deactivate-prod {project} {flag}' and remove the flag code first.")
+            f"Flag '{flag}' is not ON in production yet. "
+            f"Release it first with: ymir release {project} {flag}")
 
     if not yes:
         click.confirm(
-            f"Remove flag '{flag}' from {project}? "
-            f"Make sure all flag code has been cleaned up in the codebase first.",
+            f"Promote '{flag}' to permanent in {project}?\n"
+            f"  This removes the flag — make sure all feature_enabled('{flag}') "
+            f"checks have been deleted from the codebase first.",
             abort=True)
 
     project_dir = Path(state["project_dir"])
@@ -446,7 +451,7 @@ def feature_remove(project: str, flag: str, yes: bool) -> None:
         env.get("flags", {}).pop(flag, None)
     save_state(project, state)
 
-    _git_commit(project_dir, f"chore: remove feature flag '{flag}' (fully released)")
+    _git_commit(project_dir, f"chore: promote '{flag}' to permanent (flag removed)")
     click.echo(f"✓ Flag '{flag}' removed from {project}")
 
 
