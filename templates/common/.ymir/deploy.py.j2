@@ -19,7 +19,11 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import yaml
+try:
+    import yaml
+except ImportError:
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pyyaml"], check=True)
+    import yaml
 
 ROOT = Path(__file__).parent.parent
 
