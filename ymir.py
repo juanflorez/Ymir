@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""ymir — Project bootstrapper and feature flag manager for TBD/TDD/BDD development."""
+"""ymir — Project spawner and feature flag manager for TBD/TDD/BDD development."""
 
 import configparser
 import importlib.util
-import json
 import os
 import shutil
 import stat
@@ -11,7 +10,6 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from textwrap import dedent
 
 import click
 import yaml
@@ -32,7 +30,7 @@ def load_config() -> dict:
     if cfg_path.exists():
         cfg.read(cfg_path)
 
-    def get(section, key, env_var, default):
+    def get(section, key, env_var, default=""):
         env_val = os.environ.get(env_var)
         if env_val:
             return env_val
@@ -43,22 +41,22 @@ def load_config() -> dict:
 
     return {
         "projects_root": Path(get("paths", "projects_root", "PROJECTS_ROOT",
-                                  "/home/juan/openhands/workspace")),
-        "carlos_host": get("deploy", "carlos_host", "CARLOS_HOST", "65.109.98.235"),
-        "carlos_user": get("deploy", "carlos_user", "CARLOS_USER", "root"),
-        "carlos_ssh_key": get("deploy", "carlos_ssh_key", "CARLOS_SSH_KEY",
-                               str(Path.home() / "carlos/keys/carlos.pem")),
-        "carlos_tailscale": get("deploy", "carlos_tailscale", "CARLOS_TAILSCALE", "100.122.124.15"),
+                                  str(Path.home() / "projects"))),
+        "deploy_host":   get("deploy", "deploy_host",   "DEPLOY_HOST"),
+        "deploy_user":   get("deploy", "deploy_user",   "DEPLOY_USER",  "root"),
+        "deploy_ssh_key": get("deploy", "deploy_ssh_key", "DEPLOY_SSH_KEY",
+                              str(Path.home() / "keys" / "deploy.pem")),
+        "deploy_url":    get("deploy", "deploy_url",    "DEPLOY_URL"),
         "dev_port_start": int(get("ports", "dev_port_start", "DEV_PORT_START", "8100")),
     }
 
 
 CONFIG = load_config()
-PROJECTS_ROOT = CONFIG["projects_root"]
-CARLOS_HOST = CONFIG["carlos_host"]
-CARLOS_USER = CONFIG["carlos_user"]
-CARLOS_SSH_KEY = CONFIG["carlos_ssh_key"]
-CARLOS_TAILSCALE = CONFIG["carlos_tailscale"]
+PROJECTS_ROOT  = CONFIG["projects_root"]
+DEPLOY_HOST    = CONFIG["deploy_host"]
+DEPLOY_USER    = CONFIG["deploy_user"]
+DEPLOY_SSH_KEY = CONFIG["deploy_ssh_key"]
+DEPLOY_URL     = CONFIG["deploy_url"]
 DEV_PORT_START = CONFIG["dev_port_start"]
 
 
@@ -71,7 +69,7 @@ def _load_stacks() -> dict:
     stacks_dir = YMIR_ROOT / "stacks"
     if not stacks_dir.exists():
         return stacks
-    for stack_dir in stacks_dir.iterdir():
+    for stack_dir in sorted(stacks_dir.iterdir()):
         module_path = stack_dir / "stack.py"
         if not module_path.exists():
             continue
@@ -90,6 +88,7 @@ STACKS = _load_stacks()
 # ---------------------------------------------------------------------------
 
 def render(template_name: str, stack: str = None, **ctx) -> str:
+    """Render a Jinja2 template. stack= adds the stack's templates dir as first lookup."""
     loaders = []
     if stack:
         stack_tpl = YMIR_ROOT / "stacks" / stack / "templates"
@@ -113,7 +112,7 @@ def save_state(project: str, state: dict) -> None:
 
 
 def detect_stack(stack_str: str) -> str:
-    """Return primary stack name from a freeform stack description using KEYWORDS."""
+    """Return primary stack name from a freeform description using each stack's KEYWORDS."""
     s = stack_str.lower()
     for name, mod in STACKS.items():
         for keyword in getattr(mod, "KEYWORDS", []):
@@ -131,9 +130,15 @@ def next_dev_port(project: str) -> int:
     return port
 
 
+def _require_deploy_config() -> None:
+    if not DEPLOY_HOST:
+        raise click.ClickException(
+            "deploy_host is not configured. Set it in ymir.cfg or DEPLOY_HOST env var.")
+
+
 def run_ssh(cmd: str, capture: bool = False) -> subprocess.CompletedProcess:
-    ssh = ["ssh", "-i", CARLOS_SSH_KEY, "-o", "StrictHostKeyChecking=no",
-           f"{CARLOS_USER}@{CARLOS_HOST}", cmd]
+    ssh = ["ssh", "-i", DEPLOY_SSH_KEY, "-o", "StrictHostKeyChecking=no",
+           f"{DEPLOY_USER}@{DEPLOY_HOST}", cmd]
     if capture:
         return subprocess.run(ssh, capture_output=True, text=True)
     return subprocess.run(ssh)
@@ -142,16 +147,16 @@ def run_ssh(cmd: str, capture: bool = False) -> subprocess.CompletedProcess:
 def build_and_push_image(project_dir: Path, tag: str) -> None:
     click.echo(f"  Building image {tag}...")
     subprocess.run(["docker", "build", "-t", tag, str(project_dir)], check=True)
-    click.echo(f"  Saving and transferring image to Carlos...")
+    click.echo(f"  Transferring image to deploy server...")
     save = subprocess.Popen(["docker", "save", tag], stdout=subprocess.PIPE)
     load = subprocess.run(
-        ["ssh", "-i", CARLOS_SSH_KEY, "-o", "StrictHostKeyChecking=no",
-         f"{CARLOS_USER}@{CARLOS_HOST}", "docker load"],
+        ["ssh", "-i", DEPLOY_SSH_KEY, "-o", "StrictHostKeyChecking=no",
+         f"{DEPLOY_USER}@{DEPLOY_HOST}", "docker load"],
         stdin=save.stdout
     )
     save.wait()
     if load.returncode != 0:
-        raise click.ClickException("Failed to load image on Carlos")
+        raise click.ClickException("Failed to load image on deploy server")
 
 
 def flag_env_vars(flags: dict) -> str:
@@ -171,7 +176,7 @@ def cli():
 
 
 # ---------------------------------------------------------------------------
-# init
+# spawn
 # ---------------------------------------------------------------------------
 
 @cli.command()
@@ -181,8 +186,8 @@ def cli():
 @click.option("--flag", "flags", multiple=True, help="Initial feature flags (repeatable)")
 @click.option("--poetry", "use_poetry", is_flag=True, default=False,
               help="Use Poetry for dependency management instead of pip+requirements.txt")
-def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool) -> None:
-    """Initialize a new project with git, venv, LSP, hooks, and Docker setup."""
+def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: bool) -> None:
+    """Spawn a new project: scaffold files, git repo, venv, hooks, and Docker setup."""
     project_dir = PROJECTS_ROOT / name
     if project_dir.exists():
         raise click.ClickException(f"{project_dir} already exists")
@@ -201,35 +206,36 @@ def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool
                description=description, today=today, use_poetry=use_poetry,
                flags={f: False for f in flags})
 
-    click.echo(f"Initializing {name} ({primary_stack}) at {project_dir}")
+    click.echo(f"Spawning {name} ({primary_stack}) at {project_dir}")
     project_dir.mkdir(parents=True)
 
     # Common files
-    _write(project_dir / "README.md", render("common/README.md.j2", **ctx))
-    _write(project_dir / "CLAUDE.md", render("common/CLAUDE.md.j2", **ctx))
-    _write(project_dir / "AGENTS.md", render("common/AGENTS.md.j2", **ctx))
-    _write(project_dir / ".gitignore", render("common/.gitignore.j2", **ctx))
-    _write(project_dir / "feature_flags.yaml", render("common/feature_flags.yaml.j2", **ctx))
+    _write(project_dir / "README.md",           render("common/README.md.j2", **ctx))
+    _write(project_dir / "CLAUDE.md",           render("common/CLAUDE.md.j2", **ctx))
+    _write(project_dir / "AGENTS.md",           render("common/AGENTS.md.j2", **ctx))
+    _write(project_dir / ".gitignore",          render("common/.gitignore.j2", **ctx))
+    _write(project_dir / "feature_flags.yaml",  render("common/feature_flags.yaml.j2", **ctx))
     compose_tpl = "common/docker-compose.poetry.yml.j2" if use_poetry else "common/docker-compose.yml.j2"
-    _write(project_dir / "docker-compose.yml", render(compose_tpl, **ctx))
-    _write(project_dir / "Makefile", render("common/Makefile.j2", **ctx))
+    _write(project_dir / "docker-compose.yml",  render(compose_tpl, **ctx))
+    _write(project_dir / "Makefile",            render("common/Makefile.j2", **ctx))
 
-    # Stack-specific files via pluggable stack module
-    STACKS[primary_stack].init(project_dir, ctx, _write, render)
+    # Stack-specific files — pass ctx without 'stack' key to avoid kwarg collision in render_fn
+    stack_ctx = {k: v for k, v in ctx.items() if k != "stack"}
+    STACKS[primary_stack].init(project_dir, stack_ctx, _write, render)
 
     # Terraform
     tf_dir = project_dir / "terraform"
     tf_dir.mkdir()
-    _write(tf_dir / "main.tf", render("terraform/main.tf.j2", **ctx))
+    _write(tf_dir / "main.tf",      render("terraform/main.tf.j2", **ctx))
     _write(tf_dir / "variables.tf", render("terraform/variables.tf.j2", **ctx))
-    _write(tf_dir / "outputs.tf", render("terraform/outputs.tf.j2", **ctx))
-    _write(tf_dir / "dev.tfvars", render("terraform/dev.tfvars.j2", **ctx))
-    _write(tf_dir / "prod.tfvars", render("terraform/prod.tfvars.j2", **ctx))
+    _write(tf_dir / "outputs.tf",   render("terraform/outputs.tf.j2", **ctx))
+    _write(tf_dir / "dev.tfvars",   render("terraform/dev.tfvars.j2", **ctx))
+    _write(tf_dir / "prod.tfvars",  render("terraform/prod.tfvars.j2", **ctx))
 
     # Git init + hooks
     subprocess.run(["git", "init", "-b", "main"], cwd=project_dir, check=True)
     subprocess.run(["git", "config", "user.name", "dev"], cwd=project_dir, check=True)
-    subprocess.run(["git", "config", "user.email", "dev@albert.local"], cwd=project_dir, check=True)
+    subprocess.run(["git", "config", "user.email", "dev@localhost"], cwd=project_dir, check=True)
     _install_hooks(project_dir, primary_stack)
 
     # venv / deps
@@ -256,7 +262,7 @@ def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool
 
     subprocess.run(["git", "add", "-A"], cwd=project_dir, check=True)
     subprocess.run(
-        ["git", "commit", "-m", f"chore: bootstrap {name} ({primary_stack})"],
+        ["git", "commit", "-m", f"chore: spawn {name} ({primary_stack})"],
         cwd=project_dir, check=True
     )
 
@@ -270,7 +276,7 @@ def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool
     }
     save_state(name, state)
 
-    click.echo(f"\n✓ {name} ready at {project_dir}")
+    click.echo(f"\n✓ {name} spawned at {project_dir}")
     click.echo(f"  Stack:  {primary_stack}")
     click.echo(f"  Deps:   {'Poetry (pyproject.toml)' if use_poetry else 'pip (requirements.txt)'}")
     click.echo(f"  Flags:  {', '.join(flags) if flags else 'none'}")
@@ -377,7 +383,7 @@ def feature_deactivate_dev(project: str, flag: str) -> None:
 
 @cli.group()
 def deploy():
-    """Deploy to environments."""
+    """Deploy to environments on the configured deploy server."""
 
 
 @deploy.command("prod")
@@ -385,6 +391,7 @@ def deploy():
 @click.argument("flag")
 def deploy_prod(project: str, flag: str) -> None:
     """Deploy to production with <flag> OFF (dark launch)."""
+    _require_deploy_config()
     state = _require_state(project)
     _require_flag(state, flag)
     click.echo(f"Dark launching '{flag}' to prod (flag is OFF)...")
@@ -400,6 +407,7 @@ def deploy_prod(project: str, flag: str) -> None:
 @click.argument("flag")
 def release(project: str, flag: str) -> None:
     """Activate <flag> in production (release the feature)."""
+    _require_deploy_config()
     state = _require_state(project)
     _require_flag(state, flag)
     click.echo(f"Releasing '{flag}' in production (flag ON)...")
@@ -414,6 +422,7 @@ def release(project: str, flag: str) -> None:
 @click.argument("flag")
 def deactivate_prod(project: str, flag: str) -> None:
     """Deactivate <flag> in production (rollback)."""
+    _require_deploy_config()
     state = _require_state(project)
     _require_flag(state, flag)
     click.echo(f"Rolling back '{flag}' in production (flag OFF)...")
@@ -424,7 +433,7 @@ def deactivate_prod(project: str, flag: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# status / ls
+# status / ls / stacks
 # ---------------------------------------------------------------------------
 
 @cli.command()
@@ -453,12 +462,12 @@ def status(project: str) -> None:
     if dev_envs:
         click.echo("\nDev Environments:")
         for env in dev_envs:
-            url = f"http://{CARLOS_TAILSCALE}:{env['port']}"
+            url = f"{DEPLOY_URL}:{env['port']}" if DEPLOY_URL else f"<deploy_url>:{env['port']}"
             click.echo(f"  {env['id']}  {url}  deployed={env.get('deployed', False)}")
 
     prod = state.get("prod", {})
     if prod.get("deployed"):
-        url = f"http://{CARLOS_TAILSCALE}:{prod['port']}"
+        url = f"{DEPLOY_URL}:{prod['port']}" if DEPLOY_URL else f"<deploy_url>:{prod['port']}"
         click.echo(f"\nProduction: {url}")
     else:
         click.echo("\nProduction: not deployed")
@@ -470,7 +479,7 @@ def list_projects() -> None:
     STATE_DIR.mkdir(exist_ok=True)
     projects = sorted(STATE_DIR.glob("*.yaml"))
     if not projects:
-        click.echo("No projects yet. Run: ymir init <name>")
+        click.echo("No projects yet. Run: ymir spawn <name>")
         return
     for p in projects:
         state = yaml.safe_load(p.read_text()) or {}
@@ -490,6 +499,7 @@ def list_stacks() -> None:
 # ---------------------------------------------------------------------------
 
 def _deploy_dev(project: str, state: dict, flag: str, enabled: bool) -> None:
+    _require_deploy_config()
     project_dir = Path(state["project_dir"])
     port = next_dev_port(project)
     env_id = f"dev-{len(state.get('dev_envs', [])) + 1}"
@@ -510,7 +520,7 @@ def _deploy_dev(project: str, state: dict, flag: str, enabled: bool) -> None:
         result = run_ssh(cmd)
         deployed = result.returncode == 0
     except Exception as e:
-        click.echo(f"  Warning: deploy to Carlos failed ({e}). State saved locally.")
+        click.echo(f"  Warning: deploy failed ({e}). State saved locally.")
         deployed = False
 
     state.setdefault("dev_envs", []).append({
@@ -519,8 +529,8 @@ def _deploy_dev(project: str, state: dict, flag: str, enabled: bool) -> None:
     })
     save_state(project, state)
 
-    url = f"http://{CARLOS_TAILSCALE}:{port}"
-    status_str = "live" if deployed else "FAILED (check Carlos)"
+    url = f"{DEPLOY_URL}:{port}" if DEPLOY_URL else f"<deploy_url>:{port}"
+    status_str = "live" if deployed else "FAILED (check deploy server)"
     click.echo(f"✓ {env_id} — {url} — {status_str}")
 
 
@@ -541,15 +551,15 @@ def _deploy_production(project: str, state: dict, flag_override: dict = None) ->
         result = run_ssh(cmd)
         deployed = result.returncode == 0
     except Exception as e:
-        click.echo(f"  Warning: deploy to Carlos failed ({e}). State saved locally.")
+        click.echo(f"  Warning: deploy failed ({e}). State saved locally.")
         deployed = False
 
     state["prod"].update({"port": port, "flags": flags, "container": container,
                           "tag": tag, "deployed": deployed})
     save_state(project, state)
 
-    url = f"http://{CARLOS_TAILSCALE}:{port}"
-    status_str = "live" if deployed else "FAILED (check Carlos)"
+    url = f"{DEPLOY_URL}:{port}" if DEPLOY_URL else f"<deploy_url>:{port}"
+    status_str = "live" if deployed else "FAILED (check deploy server)"
     click.echo(f"✓ prod — {url} — {status_str}")
 
 
@@ -565,7 +575,7 @@ def _require_state(project: str) -> dict:
     state = load_state(project)
     if not state:
         raise click.ClickException(
-            f"Project '{project}' not found. Run: ymir init {project}")
+            f"Project '{project}' not found. Run: ymir spawn {project}")
     return state
 
 

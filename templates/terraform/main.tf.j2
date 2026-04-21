@@ -1,10 +1,10 @@
 # Terraform config for {{ name }}
-# Manages Docker containers on Carlos (Hetzner)
+# Manages Docker containers on the deploy server.
 #
 # Prerequisites:
 #   1. terraform init
-#   2. SSH access to Carlos: export TF_VAR_carlos_ssh_key=<path>
-#   3. Docker installed on Carlos
+#   2. Set TF_VAR_deploy_host, TF_VAR_deploy_ssh_key (or use a .tfvars file)
+#   3. Docker installed on the deploy server
 #
 # Usage:
 #   terraform apply -var-file=dev.tfvars    # deploy dev
@@ -24,13 +24,13 @@ terraform {
   }
 }
 
-# Docker provider connects to Carlos via SSH tunnel
+# Docker provider connects to the deploy server via SSH tunnel
 provider "docker" {
-  host     = "ssh://${var.carlos_user}@${var.carlos_host}:22"
-  ssh_opts = ["-i", var.carlos_ssh_key, "-o", "StrictHostKeyChecking=no"]
+  host     = "ssh://${var.deploy_user}@${var.deploy_host}:22"
+  ssh_opts = ["-i", var.deploy_ssh_key, "-o", "StrictHostKeyChecking=no"]
 }
 
-# Build and push image to Carlos before creating container
+# Build and push image to deploy server before creating container
 resource "null_resource" "push_image" {
   triggers = {
     image_tag = var.image_tag
@@ -39,8 +39,8 @@ resource "null_resource" "push_image" {
   provisioner "local-exec" {
     command = <<-EOT
       docker build -t ${var.image_tag} ${var.project_dir}
-      docker save ${var.image_tag} | ssh -i ${var.carlos_ssh_key} \
-        -o StrictHostKeyChecking=no ${var.carlos_user}@${var.carlos_host} docker load
+      docker save ${var.image_tag} | ssh -i ${var.deploy_ssh_key} \
+        -o StrictHostKeyChecking=no ${var.deploy_user}@${var.deploy_host} docker load
     EOT
   }
 }

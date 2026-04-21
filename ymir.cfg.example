@@ -4,26 +4,26 @@
 # ymir.cfg is gitignored — never commit it (it may contain SSH key paths).
 #
 # All values here can also be overridden with environment variables (uppercase,
-# underscored). e.g. CARLOS_HOST overrides [deploy] carlos_host.
+# underscored). e.g. DEPLOY_HOST overrides [deploy] deploy_host.
 
 [paths]
 # Root directory where new projects are created.
-# On Albert with OpenHands: /home/juan/openhands/workspace
 projects_root = /home/you/projects
 
 [deploy]
 # SSH host for deployments (your server running Docker).
-carlos_host = YOUR_SERVER_IP
+deploy_host = YOUR_SERVER_IP
 
 # SSH user on the deployment server.
-carlos_user = root
+deploy_user = root
 
 # Path to the SSH private key for the deployment server.
 # Relative to home dir or absolute.
-carlos_ssh_key = ~/keys/deploy.pem
+deploy_ssh_key = ~/keys/deploy.pem
 
-# Tailscale or public IP for accessing deployed services in the browser.
-carlos_tailscale = YOUR_TAILSCALE_OR_PUBLIC_IP
+# Base URL for accessing deployed services in the browser (no trailing slash).
+# e.g. http://your-server-ip  or  http://your.tailscale.ip
+deploy_url = http://YOUR_SERVER_URL
 
 [ports]
 # First port to allocate for dev environments.

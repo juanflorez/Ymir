@@ -1,20 +1,18 @@
-variable "carlos_host" {
-  description = "Carlos server hostname or IP"
-  default     = "65.109.98.235"
+variable "deploy_host" {
+  description = "Deploy server hostname or IP"
 }
 
-variable "carlos_user" {
-  description = "SSH user on Carlos"
+variable "deploy_user" {
+  description = "SSH user on the deploy server"
   default     = "root"
 }
 
-variable "carlos_ssh_key" {
-  description = "Path to SSH private key for Carlos"
-  default     = "~/carlos/keys/carlos.pem"
+variable "deploy_ssh_key" {
+  description = "Path to SSH private key for the deploy server"
 }
 
 variable "project_dir" {
-  description = "Absolute path to project directory on Albert"
+  description = "Absolute path to project directory"
   default     = "{{ project_dir }}"
 }
 

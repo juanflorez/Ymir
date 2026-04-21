@@ -1,4 +1,4 @@
-# {{ name }} — OpenHands Agent Instructions
+# {{ name }} — Agent Instructions
 
 This project uses **Trunk-Based Development** with feature flags.
 
@@ -16,9 +16,9 @@ Before starting any feature work:
 2. If not, all new user-facing behavior must go behind a flag.
 3. Write BDD scenario first, then unit test, then implementation.
 
-## Running Tests (OpenHands container environment)
+## Running Tests (container environment)
 
-The project uses Poetry for dependency management. Inside the OpenHands container,
+The project uses Poetry for dependency management. Inside the container,
 the project venv is not pre-activated. Set up the environment once per session:
 
 ```bash
@@ -64,7 +64,7 @@ flags:
       prod: false
 ```
 
-## Deployment (hands off — use ci_cd tool)
+## Deployment (hands off — use ymir tool)
 
 The agent should NOT run docker or terraform commands directly.
-Deployment is managed by `ci_cd` CLI on Albert at `~/ci_cd/`.
+Deployment is managed by the `ymir` CLI.

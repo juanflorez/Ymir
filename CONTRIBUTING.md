@@ -41,6 +41,9 @@ def init(project_dir, ctx, write_fn, render_fn):
 | `use_poetry` | Boolean |
 | `primary_stack` | Stack name string |
 
+> Note: the `stack` key (raw CLI input string) is stripped from `ctx` before it reaches `init()`
+> to avoid keyword-argument collision in `render_fn`. Use `primary_stack` if you need the stack name.
+
 **`write_fn(path, content)`** — write a file, creating parent dirs.
 
 **`render_fn(template_name, stack=None, **ctx)`** — render a Jinja2 template.
@@ -56,8 +59,8 @@ Common templates (Makefile, .gitignore, CLAUDE.md, AGENTS.md, etc.) live in `tem
 ### 4. Test it
 
 ```bash
-python ymir.py init TestProject --stack mystack --description "Testing my new stack"
-ls ../projects/TestProject/
+python ymir.py spawn TestProject --stack mystack --description "Testing my new stack"
+ls ~/projects/TestProject/
 ```
 
 ### Stack lifecycle

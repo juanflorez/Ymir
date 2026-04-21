@@ -1,6 +1,6 @@
 # {{ name }}
 
-{{ description or "Project bootstrapped by ci_cd." }}
+{{ description or "Project spawned by Ymir." }}
 
 **Stack:** {{ stack }}
 **Created:** {{ today }}
@@ -26,7 +26,7 @@ Flags are defined in `feature_flags.yaml` and injected as environment variables 
 {% for flag in flags -%}
 | `{{ flag }}` | OFF | — |
 {% else -%}
-| — | — | No flags yet. Run `ci_cd feature start {{ name }} <flag>` |
+| — | — | No flags yet. Run `ymir feature start {{ name }} <flag>` |
 {% endfor %}
 
 To activate a flag locally:
@@ -38,24 +38,22 @@ export FEATURE_<FLAG>=true
 
 ```bash
 # Start a feature
-ci_cd feature start {{ name }} <flag>
+ymir feature start {{ name }} <flag>
 
 # Test in dev (flag ON)
-ci_cd feature activate-dev {{ name }} <flag>
+ymir feature activate-dev {{ name }} <flag>
 
 # Dark launch to prod (flag OFF)
-ci_cd deploy prod {{ name }} <flag>
+ymir deploy prod {{ name }} <flag>
 
 # Release to users
-ci_cd release {{ name }} <flag>
+ymir release {{ name }} <flag>
 
 # Rollback
-ci_cd deactivate-prod {{ name }} <flag>
+ymir deactivate-prod {{ name }} <flag>
 ```
 
 ## Development Methodology
-
-See `../../ci_cd/TBD_PRACTICES.md` for TBD/TDD/BDD guidelines.
 
 - **TBD:** One branch (`main`). Feature flags hide incomplete work.
 - **TDD:** Red → Green → Refactor.

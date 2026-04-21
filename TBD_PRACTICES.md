@@ -106,9 +106,9 @@ commit to main
     ▼
 [CI]               → build Docker image, tag with commit SHA
     │
-    ├──[dev]       → deploy to Carlos dev container (feature flags configurable)
+    ├──[dev]       → deploy to dev container on deploy server (feature flags configurable)
     │
-    └──[prod]      → deploy to Carlos prod container (all flags OFF by default)
+    └──[prod]      → deploy to prod container on deploy server (all flags OFF by default)
 ```
 
 ### Release Gate
