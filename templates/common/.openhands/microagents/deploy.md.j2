@@ -18,6 +18,10 @@ triggers:
 
 # Deploying {{ name }}
 
+**IMPORTANT: There is NO local web server. Do NOT run `manage.py runserver` or any local server.**
+**"Deploy to dev" means SSH + Docker build on a REMOTE server via `.ymir/deploy.py`.**
+**The app runs on Carlos (remote), not on localhost.**
+
 All deploy and flag operations go through `.ymir/deploy.py`. Run it from the project root.
 
 ## After making code changes

@@ -161,7 +161,7 @@ def do_prod(_args):
         _nginx(c)
         s["prod_deployed"] = True
         _save(s)
-        print(f"✓ prod {c['deploy_url']}/{c['slug']}/")
+        print(f"✓ prod {c.get('prod_url', c['deploy_url'])}/{c['slug']}/")
     else:
         print("✗ deploy failed")
         sys.exit(1)
@@ -215,7 +215,7 @@ def do_status(_args):
     fl = _flags()
     print("\nProject : {{ name }}")
     print(f"Dev     : {'deployed' if s.get('dev_deployed') else 'not deployed':12s}  {c['deploy_url']}:{c['dev_port']}")
-    print(f"Prod    : {'deployed' if s.get('prod_deployed') else 'not deployed':12s}  {c['deploy_url']}/{c['slug']}/")
+    print(f"Prod    : {'deployed' if s.get('prod_deployed') else 'not deployed':12s}  {c.get('prod_url', c['deploy_url'])}/{c['slug']}/")
     if fl:
         print("\nFlags:")
         for flag_name in fl:

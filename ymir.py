@@ -47,6 +47,8 @@ def load_config() -> dict:
         "deploy_ssh_key": get("deploy", "deploy_ssh_key", "DEPLOY_SSH_KEY",
                               str(Path.home() / "keys" / "deploy.pem")),
         "deploy_url":    get("deploy", "deploy_url",    "DEPLOY_URL"),
+        "prod_url":      get("deploy", "prod_url",      "PROD_URL", ""),
+        "github_org":    get("github", "github_org",    "GITHUB_ORG", ""),
         "dev_port_start": int(get("ports", "dev_port_start", "DEV_PORT_START", "8100")),
         "workspace_host": get("workspace", "workspace_host", "WORKSPACE_HOST"),
         "workspace_user": get("workspace", "workspace_user", "WORKSPACE_USER", "juan"),
@@ -62,6 +64,8 @@ DEPLOY_HOST        = CONFIG["deploy_host"]
 DEPLOY_USER        = CONFIG["deploy_user"]
 DEPLOY_SSH_KEY     = CONFIG["deploy_ssh_key"]
 DEPLOY_URL         = CONFIG["deploy_url"]
+PROD_URL           = CONFIG["prod_url"]
+GITHUB_ORG         = CONFIG["github_org"]
 DEV_PORT_START     = CONFIG["dev_port_start"]
 WORKSPACE_HOST     = CONFIG["workspace_host"]
 WORKSPACE_USER     = CONFIG["workspace_user"]
@@ -281,7 +285,8 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
                description=description, today=today, use_poetry=use_poetry,
                flags={f: False for f in flags},
                deploy_host=DEPLOY_HOST, deploy_user=DEPLOY_USER,
-               deploy_url=DEPLOY_URL, dev_port=dev_port, prod_port=prod_port)
+               deploy_url=DEPLOY_URL, prod_url=PROD_URL or DEPLOY_URL,
+               github_org=GITHUB_ORG, dev_port=dev_port, prod_port=prod_port)
 
     click.echo(f"Spawning {name} ({primary_stack}) at {project_dir}")
     project_dir.mkdir(parents=True)
@@ -313,6 +318,8 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
     microagent_content = render("common/.openhands/microagents/deploy.md.j2", **ctx)
     _write(project_dir / ".openhands" / "microagents" / "deploy.md", microagent_content)
     _write(PROJECTS_ROOT / ".openhands" / "microagents" / f"{name}-deploy.md", microagent_content)
+    _write(project_dir / ".openhands" / "microagents" / "repo.md",
+           render("common/.openhands/microagents/repo.md.j2", **ctx))
 
     # Common files
     _write(project_dir / "README.md",           render("common/README.md.j2", **ctx))
