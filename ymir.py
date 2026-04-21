@@ -48,16 +48,25 @@ def load_config() -> dict:
                               str(Path.home() / "keys" / "deploy.pem")),
         "deploy_url":    get("deploy", "deploy_url",    "DEPLOY_URL"),
         "dev_port_start": int(get("ports", "dev_port_start", "DEV_PORT_START", "8100")),
+        "workspace_host": get("workspace", "workspace_host", "WORKSPACE_HOST"),
+        "workspace_user": get("workspace", "workspace_user", "WORKSPACE_USER", "juan"),
+        "workspace_ssh_key": get("workspace", "workspace_ssh_key", "WORKSPACE_SSH_KEY",
+                                 str(Path.home() / ".ssh" / "id_ed25519")),
+        "workspace_path": get("workspace", "workspace_path", "WORKSPACE_PATH"),
     }
 
 
 CONFIG = load_config()
-PROJECTS_ROOT  = CONFIG["projects_root"]
-DEPLOY_HOST    = CONFIG["deploy_host"]
-DEPLOY_USER    = CONFIG["deploy_user"]
-DEPLOY_SSH_KEY = CONFIG["deploy_ssh_key"]
-DEPLOY_URL     = CONFIG["deploy_url"]
-DEV_PORT_START = CONFIG["dev_port_start"]
+PROJECTS_ROOT      = CONFIG["projects_root"]
+DEPLOY_HOST        = CONFIG["deploy_host"]
+DEPLOY_USER        = CONFIG["deploy_user"]
+DEPLOY_SSH_KEY     = CONFIG["deploy_ssh_key"]
+DEPLOY_URL         = CONFIG["deploy_url"]
+DEV_PORT_START     = CONFIG["dev_port_start"]
+WORKSPACE_HOST     = CONFIG["workspace_host"]
+WORKSPACE_USER     = CONFIG["workspace_user"]
+WORKSPACE_SSH_KEY  = CONFIG["workspace_ssh_key"]
+WORKSPACE_PATH     = CONFIG["workspace_path"]
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +162,35 @@ def next_dev_port(project: str) -> int:
     return port
 
 
+def sync_to_workspace(project_dir: Path) -> bool:
+    """Rsync a project to the OpenHands workspace on the remote machine."""
+    if not WORKSPACE_HOST or not WORKSPACE_PATH:
+        return False
+    dest = f"{WORKSPACE_USER}@{WORKSPACE_HOST}:{WORKSPACE_PATH}/"
+    click.echo(f"  Syncing to workspace {dest}...")
+    result = subprocess.run([
+        "rsync", "-a", "--delete",
+        "--exclude=.venv/", "--exclude=__pycache__/", "--exclude=*.pyc",
+        "-e", f"ssh -i {WORKSPACE_SSH_KEY} -o StrictHostKeyChecking=no",
+        f"{project_dir}/",
+        f"{dest}{project_dir.name}/",
+    ])
+    if result.returncode == 0:
+        click.echo(f"  ✓ Synced to {WORKSPACE_PATH}/{project_dir.name}/")
+        # Also sync workspace-level microagents
+        ws_micro = PROJECTS_ROOT / ".openhands" / "microagents"
+        if ws_micro.exists():
+            subprocess.run([
+                "rsync", "-a",
+                "-e", f"ssh -i {WORKSPACE_SSH_KEY} -o StrictHostKeyChecking=no",
+                f"{ws_micro}/",
+                f"{WORKSPACE_USER}@{WORKSPACE_HOST}:{WORKSPACE_PATH}/.openhands/microagents/",
+            ])
+        return True
+    click.echo("  Warning: workspace sync failed — OpenHands may not see latest files")
+    return False
+
+
 def _require_deploy_config() -> None:
     if not DEPLOY_HOST:
         raise click.ClickException(
@@ -234,12 +272,47 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
 
     today = date.today().isoformat()
     app = name.lower().replace("-", "_")
+
+    # Assign ports up-front so they go into config.yaml
+    dev_port = next_dev_port(name)
+    prod_port = dev_port + 1
+
     ctx = dict(name=name, app=app, stack=stack, primary_stack=primary_stack,
                description=description, today=today, use_poetry=use_poetry,
-               flags={f: False for f in flags})
+               flags={f: False for f in flags},
+               deploy_host=DEPLOY_HOST, deploy_user=DEPLOY_USER,
+               deploy_url=DEPLOY_URL, dev_port=dev_port, prod_port=prod_port)
 
     click.echo(f"Spawning {name} ({primary_stack}) at {project_dir}")
     project_dir.mkdir(parents=True)
+
+    # Generate per-project SSH deploy key
+    ymir_dir = project_dir / ".ymir"
+    ymir_dir.mkdir()
+    key_path = ymir_dir / "deploy_key"
+    subprocess.run(
+        ["ssh-keygen", "-t", "ed25519", "-f", str(key_path), "-N", "", "-C", f"{name}-ymir"],
+        check=True, capture_output=True
+    )
+    if DEPLOY_HOST:
+        pub_key = (key_path.with_suffix(".pub")).read_text().strip()
+        subprocess.run(
+            ["ssh", "-i", DEPLOY_SSH_KEY, "-o", "StrictHostKeyChecking=no",
+             f"{DEPLOY_USER}@{DEPLOY_HOST}",
+             f"echo '{pub_key}' >> ~/.ssh/authorized_keys"],
+            capture_output=True
+        )
+        click.echo(f"  Deploy key registered on {DEPLOY_HOST}")
+
+    # .ymir/ config files
+    _write(ymir_dir / "config.yaml",   render("common/.ymir/config.yaml.j2", **ctx))
+    _write(ymir_dir / "deploy.py",     render("common/.ymir/deploy.py.j2", **ctx))
+    (ymir_dir / "deploy.py").chmod(0o755)
+
+    # OpenHands microagent — inside project (reference) and workspace root (loaded by OpenHands)
+    microagent_content = render("common/.openhands/microagents/deploy.md.j2", **ctx)
+    _write(project_dir / ".openhands" / "microagents" / "deploy.md", microagent_content)
+    _write(PROJECTS_ROOT / ".openhands" / "microagents" / f"{name}-deploy.md", microagent_content)
 
     # Common files
     _write(project_dir / "README.md",           render("common/README.md.j2", **ctx))
@@ -307,6 +380,8 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
                  "container": f"{name.lower()}-prod", "deployed": False},
     }
     save_state(name, state)
+
+    sync_to_workspace(project_dir)
 
     click.echo(f"\n✓ {name} spawned at {project_dir}")
     click.echo(f"  Stack:  {primary_stack}")

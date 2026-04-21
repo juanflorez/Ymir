@@ -71,7 +71,18 @@ flags:
 
 Then use `feature_enabled("my_flag")` in code and tests.
 
-## Deployment (hands off — use ymir tool)
+## Deployment
 
-Do NOT run docker, terraform, or ymir commands.
-Deployment is handled externally after your changes are committed.
+All deploy and flag operations go through `.ymir/deploy.py` — run from the project root.
+
+```bash
+python3 .ymir/deploy.py dev                # build + deploy to dev
+python3 .ymir/deploy.py prod               # dark-launch to prod (flags OFF)
+python3 .ymir/deploy.py release <flag>     # turn flag ON in prod
+python3 .ymir/deploy.py rollback <flag>    # turn flag OFF in prod
+python3 .ymir/deploy.py activate <flag>    # turn flag ON in dev
+python3 .ymir/deploy.py deactivate <flag>  # turn flag OFF in dev
+python3 .ymir/deploy.py status             # current state + flag values
+```
+
+Do NOT run docker commands or `python3 ymir.py` directly.

@@ -1,0 +1,211 @@
+#!/usr/bin/env python3
+"""
+.ymir/deploy.py — self-contained deploy tool for {{ name }}.
+
+Run from project root:
+  python3 .ymir/deploy.py dev                # build + deploy to dev
+  python3 .ymir/deploy.py prod               # dark-launch to prod (all flags OFF)
+  python3 .ymir/deploy.py release <flag>     # turn flag ON in prod, redeploy
+  python3 .ymir/deploy.py rollback <flag>    # turn flag OFF in prod, redeploy
+  python3 .ymir/deploy.py activate <flag>    # turn flag ON in dev, redeploy
+  python3 .ymir/deploy.py deactivate <flag>  # turn flag OFF in dev, redeploy
+  python3 .ymir/deploy.py status             # show current state + flag values
+"""
+
+import subprocess
+import sys
+from datetime import date
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).parent.parent
+
+
+def _cfg():
+    return yaml.safe_load((ROOT / ".ymir/config.yaml").read_text())
+
+
+def _flags():
+    f = ROOT / "feature_flags.yaml"
+    return yaml.safe_load(f.read_text()).get("flags", {}) if f.exists() else {}
+
+
+def _state():
+    s = ROOT / ".ymir/state.yaml"
+    return yaml.safe_load(s.read_text()) if s.exists() else {}
+
+
+def _save(s):
+    (ROOT / ".ymir/state.yaml").write_text(yaml.dump(s, default_flow_style=False))
+
+
+def _ssh(cmd, c):
+    key = ROOT / c["deploy_key"]
+    return subprocess.run(
+        ["ssh", "-i", str(key), "-o", "StrictHostKeyChecking=no",
+         "-o", "ConnectTimeout=15",
+         f"{c['deploy_user']}@{c['deploy_host']}", cmd]
+    ).returncode == 0
+
+
+def _rsync(c):
+    key = ROOT / c["deploy_key"]
+    r = subprocess.run([
+        "rsync", "-a", "--delete",
+        "--exclude=.venv/", "--exclude=__pycache__/", "--exclude=*.pyc",
+        "--exclude=.git/", "--exclude=.ymir/",
+        "-e", f"ssh -i {key} -o StrictHostKeyChecking=no",
+        f"{ROOT}/",
+        f"{c['deploy_user']}@{c['deploy_host']}:/tmp/{c['slug']}-build/",
+    ])
+    return r.returncode == 0
+
+
+def _build(c, tag):
+    print(f"  Syncing + building {tag}...")
+    if not _rsync(c):
+        print("  rsync failed")
+        return False
+    return _ssh(
+        f"docker build -t {tag} /tmp/{c['slug']}-build/ && rm -rf /tmp/{c['slug']}-build/", c
+    )
+
+
+def _envs(flag_states):
+    return " ".join(
+        f"-e FEATURE_{k.upper()}={'true' if v else 'false'}"
+        for k, v in flag_states.items()
+    )
+
+
+def _run_container(c, container, port, tag, flag_states, app_env):
+    e = _envs(flag_states)
+    cmd = (
+        f"docker stop {container} 2>/dev/null; docker rm {container} 2>/dev/null; "
+        f"docker run -d --name {container} -p {port}:8000 -e APP_ENV={app_env} {e} {tag}"
+    )
+    return _ssh(cmd, c)
+
+
+def _nginx(c):
+    slug, port = c["slug"], c["prod_port"]
+    conf = (
+        "location /" + slug + "/ {\n"
+        "    proxy_pass http://127.0.0.1:" + str(port) + "/;\n"
+        "    proxy_set_header Host $host;\n"
+        "    proxy_set_header X-Real-IP $remote_addr;\n"
+        "}\n"
+    )
+    cmd = (
+        "mkdir -p /etc/nginx/ymir-locations && "
+        "grep -q 'ymir-locations' /etc/nginx/sites-enabled/default || "
+        "sed -i '/server_name _;/a\\    include /etc/nginx/ymir-locations/*.conf;' "
+        "/etc/nginx/sites-enabled/default && "
+        "cat > /etc/nginx/ymir-locations/" + slug + "-prod.conf << 'NGINXEOF'\n" + conf + "NGINXEOF\n"
+        "nginx -t && nginx -s reload"
+    )
+    _ssh(cmd, c)
+
+
+# ─── commands ────────────────────────────────────────────────────────────────
+
+def do_dev(_args):
+    c, s = _cfg(), _state()
+    tag = f"{c['slug']}:dev-{date.today().isoformat()}"
+    flag_states = {k: s.get("dev_flags", {}).get(k, False) for k in _flags()}
+    print(f"Deploying dev  (port {c['dev_port']}, flags: {flag_states or 'none'})...")
+    if _build(c, tag) and _run_container(c, f"{c['slug']}-dev", c["dev_port"], tag, flag_states, "dev"):
+        s["dev_deployed"] = True
+        _save(s)
+        print(f"✓ dev  {c['deploy_url']}:{c['dev_port']}")
+    else:
+        print("✗ deploy failed — check SSH access and Docker on deploy server")
+        sys.exit(1)
+
+
+def do_prod(_args):
+    c, s = _cfg(), _state()
+    tag = f"{c['slug']}:prod-{date.today().isoformat()}"
+    flag_states = {k: s.get("prod_flags", {}).get(k, False) for k in _flags()}
+    print(f"Deploying prod (port {c['prod_port']}, dark launch — all flags OFF)...")
+    if _build(c, tag) and _run_container(c, f"{c['slug']}-prod", c["prod_port"], tag, flag_states, "prod"):
+        _nginx(c)
+        s["prod_deployed"] = True
+        _save(s)
+        print(f"✓ prod {c['deploy_url']}/{c['slug']}/")
+    else:
+        print("✗ deploy failed")
+        sys.exit(1)
+
+
+def _flip_and_redeploy(flag, env, value, redeploy):
+    s = _state()
+    fl = _flags()
+    if flag not in fl:
+        print(f"✗ unknown flag '{flag}'. Available: {list(fl)}")
+        sys.exit(1)
+    s.setdefault(f"{env}_flags", {})[flag] = value
+    _save(s)
+    redeploy([])
+
+
+def do_release(args):
+    if not args:
+        print("Usage: deploy.py release <flag>")
+        sys.exit(1)
+    print(f"Releasing '{args[0]}' in prod (flag ON)...")
+    _flip_and_redeploy(args[0], "prod", True, do_prod)
+
+
+def do_rollback(args):
+    if not args:
+        print("Usage: deploy.py rollback <flag>")
+        sys.exit(1)
+    print(f"Rolling back '{args[0]}' in prod (flag OFF)...")
+    _flip_and_redeploy(args[0], "prod", False, do_prod)
+
+
+def do_activate(args):
+    if not args:
+        print("Usage: deploy.py activate <flag>")
+        sys.exit(1)
+    print(f"Activating '{args[0]}' in dev (flag ON)...")
+    _flip_and_redeploy(args[0], "dev", True, do_dev)
+
+
+def do_deactivate(args):
+    if not args:
+        print("Usage: deploy.py deactivate <flag>")
+        sys.exit(1)
+    print(f"Deactivating '{args[0]}' in dev (flag OFF)...")
+    _flip_and_redeploy(args[0], "dev", False, do_dev)
+
+
+def do_status(_args):
+    c, s = _cfg(), _state()
+    fl = _flags()
+    print("\nProject : {{ name }}")
+    print(f"Dev     : {'deployed' if s.get('dev_deployed') else 'not deployed':12s}  {c['deploy_url']}:{c['dev_port']}")
+    print(f"Prod    : {'deployed' if s.get('prod_deployed') else 'not deployed':12s}  {c['deploy_url']}/{c['slug']}/")
+    if fl:
+        print("\nFlags:")
+        for flag_name in fl:
+            dv = "ON " if s.get("dev_flags",  {}).get(flag_name) else "OFF"
+            pv = "ON " if s.get("prod_flags", {}).get(flag_name) else "OFF"
+            print(f"  {flag_name:30s}  dev={dv}  prod={pv}")
+
+
+CMDS = {
+    "dev": do_dev, "prod": do_prod,
+    "release": do_release, "rollback": do_rollback,
+    "activate": do_activate, "deactivate": do_deactivate,
+    "status": do_status,
+}
+
+if __name__ == "__main__":
+    argv = sys.argv[1:]
+    if not argv or argv[0] not in CMDS:
+        print(__doc__)
+        sys.exit(0 if not argv else 1)
+    CMDS[argv[0]](argv[1:])

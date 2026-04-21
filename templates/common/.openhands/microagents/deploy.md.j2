@@ -1,0 +1,55 @@
+---
+name: deploy
+type: knowledge
+version: 1.0.0
+agent: CodeActAgent
+triggers:
+- deploy
+- release
+- rollback
+- feature flag
+- activate flag
+- deactivate flag
+- dark launch
+---
+
+# Deploying {{ name }}
+
+All deploy and flag operations go through `.ymir/deploy.py`. Run it from the project root.
+
+## After making code changes
+
+Once tests pass, deploy to dev:
+
+```bash
+python3 .ymir/deploy.py dev
+```
+
+## Feature flag lifecycle
+
+```bash
+# See current state
+python3 .ymir/deploy.py status
+
+# Turn a flag ON in dev (to test the feature)
+python3 .ymir/deploy.py activate <flag>
+
+# Turn a flag OFF in dev
+python3 .ymir/deploy.py deactivate <flag>
+
+# Dark-launch to prod (code ships, flags stay OFF)
+python3 .ymir/deploy.py prod
+
+# Release to users (flag ON in prod)
+python3 .ymir/deploy.py release <flag>
+
+# Rollback (flag OFF in prod)
+python3 .ymir/deploy.py rollback <flag>
+```
+
+## Rules
+
+- Never run `docker` commands directly.
+- Never run `python3 ymir.py` — that tool lives outside this project.
+- Always deploy to dev and verify before deploying to prod.
+- New features must go behind a feature flag (see `feature_flags.yaml`).
