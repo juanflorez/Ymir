@@ -409,6 +409,47 @@ def feature_deactivate_dev(project: str, flag: str) -> None:
     _deploy_dev(project, state, flag, enabled=False)
 
 
+@feature.command("remove")
+@click.argument("project")
+@click.argument("flag")
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt")
+def feature_remove(project: str, flag: str, yes: bool) -> None:
+    """Remove a feature flag after it has been fully released and cleaned up."""
+    state = _require_state(project)
+    _require_flag(state, flag)
+
+    prod_val = state.get("prod", {}).get("flags", {}).get(flag, False)
+    if prod_val:
+        raise click.ClickException(
+            f"Flag '{flag}' is still ON in production. "
+            f"Run 'ymir deactivate-prod {project} {flag}' and remove the flag code first.")
+
+    if not yes:
+        click.confirm(
+            f"Remove flag '{flag}' from {project}? "
+            f"Make sure all flag code has been cleaned up in the codebase first.",
+            abort=True)
+
+    project_dir = Path(state["project_dir"])
+
+    # Remove from feature_flags.yaml
+    flags_file = project_dir / "feature_flags.yaml"
+    if flags_file.exists():
+        flags_data = yaml.safe_load(flags_file.read_text()) or {"flags": {}}
+        flags_data.get("flags", {}).pop(flag, None)
+        flags_file.write_text(yaml.dump(flags_data, default_flow_style=False))
+
+    # Remove from state
+    state.get("feature_flags", {}).pop(flag, None)
+    state.get("prod", {}).get("flags", {}).pop(flag, None)
+    for env in state.get("dev_envs", []):
+        env.get("flags", {}).pop(flag, None)
+    save_state(project, state)
+
+    _git_commit(project_dir, f"chore: remove feature flag '{flag}' (fully released)")
+    click.echo(f"✓ Flag '{flag}' removed from {project}")
+
+
 # ---------------------------------------------------------------------------
 # deploy
 # ---------------------------------------------------------------------------

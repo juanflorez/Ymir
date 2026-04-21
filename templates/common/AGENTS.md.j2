@@ -9,17 +9,25 @@ This project uses **Trunk-Based Development** with feature flags.
 - `tests/features/` — BDD scenarios (Gherkin)
 - `Makefile` — common tasks
 
+## Feature Flag Rule
+
+**If the task mentions a feature, new functionality, or anything user-visible — it goes behind a feature flag.**
+
+1. Check `feature_flags.yaml` for an existing flag that fits.
+2. If none exists, create one (see "Adding a Feature Flag" below).
+3. **Always report which flag(s) you used or created** at the end of your response.
+
+Never implement user-facing behavior outside a flag. The flag controls whether the code path is active — the code is always deployed.
+
 ## Workflow
 
-Before starting any feature work:
-1. Check if a feature flag for this feature already exists.
-2. If not, all new user-facing behavior must go behind a flag.
-3. Write BDD scenario first, then unit test, then implementation.
+1. Write the BDD scenario in `tests/features/` first.
+2. Write the unit test (red).
+3. Implement behind the flag (green).
+4. Refactor.
+5. Report: "Used flag: `<flag_name>`" or "Created flag: `<flag_name>`".
 
 ## Running Tests (container environment)
-
-The project uses Poetry for dependency management. Inside the container,
-the project venv is not pre-activated. Set up the environment once per session:
 
 ```bash
 # Install deps into the container's Python (do this first)
@@ -30,13 +38,6 @@ export DJANGO_SETTINGS_MODULE={{ name.lower().replace('-', '_') }}.settings
 
 # Run tests
 python -m pytest tests/ -v
-
-# Run a specific test
-python -m pytest tests/test_views.py::test_name -v
-
-# Django management commands
-python manage.py migrate
-python manage.py shell
 ```
 
 Always use `python -m pytest` (not `.venv/bin/pytest`) inside the container.
@@ -46,25 +47,31 @@ Always use `python -m pytest` (not `.venv/bin/pytest`) inside the container.
 ```python
 from {{ name.lower().replace('-', '_') }}.flags import feature_enabled
 
-# Use this pattern everywhere — no direct env checks
-if feature_enabled("feature_name"):
+# Wrap ALL new user-facing code in a flag check
+if feature_enabled("my_flag"):
+    # new behaviour
+    ...
+else:
+    # existing behaviour (or 404 / empty state)
     ...
 ```
 
 ## Adding a Feature Flag
 
-Edit `feature_flags.yaml`:
+Add to `feature_flags.yaml`:
 ```yaml
 flags:
   my_flag:
-    description: "My new feature"
+    description: "What this flag enables"
     created: "YYYY-MM-DD"
     environments:
       dev: false
       prod: false
 ```
 
+Then use `feature_enabled("my_flag")` in code and tests.
+
 ## Deployment (hands off — use ymir tool)
 
-The agent should NOT run docker or terraform commands directly.
-Deployment is managed by the `ymir` CLI.
+Do NOT run docker, terraform, or ymir commands.
+Deployment is handled externally after your changes are committed.
