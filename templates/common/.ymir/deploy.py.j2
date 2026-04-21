@@ -160,6 +160,20 @@ def _verify_url(url, timeout=10):
         return False
 
 
+def _verify_remote(url, c):
+    """Verify by SSHing to the deploy host and curling locally.
+    Used as fallback when the sandbox can't resolve the deploy hostname
+    (e.g. Tailscale DNS not available inside Docker sandbox)."""
+    result = subprocess.run(
+        ["ssh", "-i", str(_key(c)), "-o", "StrictHostKeyChecking=no",
+         "-o", "ConnectTimeout=15",
+         f"{c['deploy_user']}@{c['deploy_host']}",
+         f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{c['dev_port']}/{c['slug']}/ 2>/dev/null || echo 000"],
+        capture_output=True, text=True
+    )
+    return result.stdout.strip() == "200"
+
+
 # ─── commands ────────────────────────────────────────────────────────────────
 
 def do_verify(args):
@@ -173,8 +187,13 @@ def do_verify(args):
     if _verify_url(url):
         print(f"✓ {env} is up")
     else:
-        print(f"✗ {env} not responding at {url}")
-        sys.exit(1)
+        # Fallback: sandbox may not have Tailscale DNS — check from deploy host directly
+        print(f"  Direct check failed, trying via SSH to deploy host...")
+        if env == "dev" and _verify_remote(url, c):
+            print(f"✓ {env} is up (verified via deploy host)")
+        else:
+            print(f"✗ {env} not responding at {url}")
+            sys.exit(1)
 
 
 def do_dev(_args):
@@ -189,7 +208,7 @@ def do_dev(_args):
         print(f"✓ dev  {url}")
         print("  Waiting for container to start...")
         import time; time.sleep(5)
-        if _verify_url(url):
+        if _verify_url(url) or _verify_remote(url, c):
             print("✓ health check passed")
         else:
             print("⚠ health check failed — container may still be starting, run verify to recheck")
