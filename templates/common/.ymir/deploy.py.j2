@@ -57,12 +57,19 @@ def _save(s):
     (ROOT / ".ymir/state.yaml").write_text(yaml.dump(s, default_flow_style=False))
 
 
+def _key(c):
+    """Return a /tmp copy of the deploy key with correct permissions (0600).
+    The workspace mount may be owned by a different uid, making chmod impossible there."""
+    src = ROOT / c["deploy_key"]
+    tmp = Path(f"/tmp/ymir_deploy_key_{c['slug']}")
+    import shutil
+    shutil.copy2(str(src), str(tmp))
+    tmp.chmod(0o600)
+    return tmp
+
+
 def _ssh(cmd, c):
-    key = ROOT / c["deploy_key"]
-    try:
-        key.chmod(0o600)
-    except OSError:
-        pass  # key may be on a read-only mount or owned by another user; proceed anyway
+    key = _key(c)
     return subprocess.run(
         ["ssh", "-i", str(key), "-o", "StrictHostKeyChecking=no",
          "-o", "ConnectTimeout=15",
@@ -71,7 +78,7 @@ def _ssh(cmd, c):
 
 
 def _sync(c):
-    key = ROOT / c["deploy_key"]
+    key = _key(c)
     ssh = f"ssh -i {key} -o StrictHostKeyChecking=no -o ConnectTimeout=15"
     dest = f"{c['deploy_user']}@{c['deploy_host']}"
     slug = c["slug"]
