@@ -667,6 +667,116 @@ def list_stacks() -> None:
 
 
 # ---------------------------------------------------------------------------
+# test-deploy
+# ---------------------------------------------------------------------------
+
+@cli.command("test-deploy")
+@click.argument("project")
+@click.option("--full", is_flag=True, help="Also run deploy dev + verify (makes real network calls)")
+def test_deploy(project: str, full: bool) -> None:
+    """Validate deploy.py is correctly set up for the sandbox environment."""
+    state = _require_state(project)
+    project_dir = Path(state["project_dir"])
+    passed = 0
+    failed = 0
+
+    def ok(msg):
+        nonlocal passed
+        click.echo(f"  ✓ {msg}")
+        passed += 1
+
+    def fail(msg):
+        nonlocal failed
+        click.echo(f"  ✗ {msg}")
+        failed += 1
+
+    click.echo(f"\ntest-deploy: {project}\n")
+
+    # 1. Required files exist
+    for rel in [".ymir/deploy.py", ".ymir/config.yaml", ".ymir/deploy_key", "feature_flags.yaml"]:
+        p = project_dir / rel
+        if p.exists():
+            ok(f"{rel} exists")
+        else:
+            fail(f"{rel} missing")
+
+    # 2. deploy_key must be world-readable (sandbox runs as different uid)
+    key = project_dir / ".ymir/deploy_key"
+    if key.exists():
+        mode = oct(key.stat().st_mode)[-3:]
+        if int(mode[2]) >= 4:  # other-read bit
+            ok(f"deploy_key permissions {mode} — readable by sandbox user")
+        else:
+            fail(f"deploy_key permissions {mode} — NOT readable by non-owner (will break in sandbox). Fix: chmod 644 {key}")
+
+    # 3. deploy_key is an actual SSH private key (not empty/corrupt)
+    if key.exists() and key.stat().st_size > 0:
+        content = key.read_text(errors="replace")
+        if "PRIVATE KEY" in content:
+            ok("deploy_key contains a valid private key")
+        else:
+            fail("deploy_key does not look like an SSH private key")
+
+    # 4. config.yaml has required fields
+    cfg_path = project_dir / ".ymir/config.yaml"
+    if cfg_path.exists():
+        cfg = yaml.safe_load(cfg_path.read_text())
+        for field in ["slug", "deploy_host", "deploy_user", "deploy_key", "dev_port"]:
+            if cfg.get(field):
+                ok(f"config.yaml has '{field}'")
+            else:
+                fail(f"config.yaml missing '{field}'")
+
+    # 5. deploy.py contains _key() function (sandbox-safe key handling)
+    deploy_py = project_dir / ".ymir/deploy.py"
+    if deploy_py.exists():
+        src = deploy_py.read_text()
+        if "def _key(" in src:
+            ok("deploy.py has _key() sandbox-safe key handler")
+        else:
+            fail("deploy.py missing _key() — regenerate from current template")
+        if ".ruff_cache" in src:
+            ok("deploy.py excludes .ruff_cache from sync")
+        else:
+            fail("deploy.py does not exclude .ruff_cache — regenerate from current template")
+
+    # 6. Smoke-test: deploy.py status (no network, just reads local state)
+    result = subprocess.run(
+        [sys.executable, str(deploy_py), "status"],
+        cwd=project_dir, capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        ok("deploy.py status — exits 0")
+    else:
+        fail(f"deploy.py status — failed:\n{result.stderr[:200]}")
+
+    # 7. Full deploy (optional — makes real SSH + Docker calls)
+    if full:
+        click.echo("\n  Running full deploy dev + verify...")
+        r = subprocess.run(
+            [sys.executable, str(deploy_py), "dev"],
+            cwd=project_dir
+        )
+        if r.returncode == 0:
+            ok("deploy.py dev — succeeded")
+            r2 = subprocess.run(
+                [sys.executable, str(deploy_py), "verify"],
+                cwd=project_dir
+            )
+            if r2.returncode == 0:
+                ok("deploy.py verify — app is responding")
+            else:
+                fail("deploy.py verify — app not responding after deploy")
+        else:
+            fail("deploy.py dev — failed")
+
+    click.echo(f"\n{'='*40}")
+    click.echo(f"  {passed} passed  {failed} failed")
+    if failed:
+        sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # Internal deploy helpers
 # ---------------------------------------------------------------------------
 
