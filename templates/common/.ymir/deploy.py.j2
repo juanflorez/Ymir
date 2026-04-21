@@ -44,6 +44,7 @@ def _save(s):
 
 def _ssh(cmd, c):
     key = ROOT / c["deploy_key"]
+    key.chmod(0o600)
     return subprocess.run(
         ["ssh", "-i", str(key), "-o", "StrictHostKeyChecking=no",
          "-o", "ConnectTimeout=15",
