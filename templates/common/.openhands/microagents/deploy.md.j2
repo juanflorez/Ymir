@@ -18,80 +18,34 @@ triggers:
 
 # Deploying {{ name }}
 
-**IMPORTANT: There is NO local web server. Do NOT run `manage.py runserver` or any local server.**
-**"Deploy to dev" means SSH + Docker build on a REMOTE server via `.ymir/deploy.py`.**
-**The app runs on Carlos (remote), not on localhost.**
+**STOP: No local server. Do NOT run `manage.py runserver`.**
+**Deploy = SSH + Docker build on Carlos via `.ymir/deploy.py`.**
 
-All deploy and flag operations go through `.ymir/deploy.py`. Run it from the project root.
-
-## After making code changes
-
-Once tests pass, deploy to dev. **The deploy takes 3-5 minutes** (build + SSH).
-Run it detached so it survives shell timeouts, then poll the log:
+## Deploy to dev (takes 3-5 min — run detached)
 
 ```bash
-# Step 1 — start detached (run this as ONE command)
-cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown && echo "Deploy running, PID $!"
-
-# Step 2 — wait ~30s, then check log (repeat until done)
-sleep 30 && cat /tmp/deploy.log
-
-# Step 3 — keep checking every 30s until you see ✓ or ✗
-sleep 30 && cat /tmp/deploy.log
+cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown && echo "PID $!"
+sleep 30 && cat /tmp/deploy.log   # repeat until ✓ or ✗
 ```
 
-Success looks like: `✓ dev  http://...`
-Failure looks like: `✗ deploy failed`
+After deploy: `python3 .ymir/deploy.py verify` confirms app is responding.
 
-Do NOT use `tail -f` — it will be killed and take the deploy with it.
-
-## Feature flag lifecycle
+## Commands
 
 ```bash
-# See current state (flags, deploy status)
-python3 .ymir/deploy.py status
-
-# HTTP health check — confirm the app is responding after deploy
-python3 .ymir/deploy.py verify        # checks dev
-python3 .ymir/deploy.py verify prod   # checks prod
-
-# Create a new flag
-python3 .ymir/deploy.py flag-add <flag> [optional description]
-
-# Delete a flag (removes from feature_flags.yaml + state)
+python3 .ymir/deploy.py status             # state + flag values
+python3 .ymir/deploy.py verify [dev|prod]  # HTTP health check
+python3 .ymir/deploy.py flag-add <flag> [desc]
 python3 .ymir/deploy.py flag-delete <flag>
-
-# Turn a flag ON in dev (to test the feature)
-python3 .ymir/deploy.py activate <flag>
-
-# Turn a flag OFF in dev
-python3 .ymir/deploy.py deactivate <flag>
-
-# Dark-launch to prod (code ships, all flags stay OFF)
-python3 .ymir/deploy.py prod
-
-# Release to users (flag ON in prod, redeploys)
-python3 .ymir/deploy.py release <flag>
-
-# Rollback (flag OFF in prod, redeploys)
-python3 .ymir/deploy.py rollback <flag>
+python3 .ymir/deploy.py activate <flag>    # flag ON in dev
+python3 .ymir/deploy.py deactivate <flag>  # flag OFF in dev
+python3 .ymir/deploy.py prod               # dark-launch (flags OFF)
+python3 .ymir/deploy.py release <flag>     # flag ON in prod
+python3 .ymir/deploy.py rollback <flag>    # flag OFF in prod
 ```
-
-## Full workflow for a new feature
-
-1. `python3 .ymir/deploy.py flag-add my_feature "what it does"`
-2. Write code gated behind the flag, write tests, make them pass
-3. `python3 .ymir/deploy.py activate my_feature` → test on dev
-4. `python3 .ymir/deploy.py prod` → dark launch (flag OFF in prod)
-5. `python3 .ymir/deploy.py release my_feature` → ship to users
-6. (if needed) `python3 .ymir/deploy.py rollback my_feature` → revert
-7. (cleanup) `python3 .ymir/deploy.py flag-delete my_feature` after full adoption
 
 ## Rules
 
-- Never run `docker` commands directly — Docker is on the remote server, not here.
-- Never run `python3 ymir.py` — that tool lives outside this project.
-- Never modify `Dockerfile` — it is managed by ymir, not by agents.
-- Never use `sudo` — deploy.py handles permissions itself.
-- Always deploy to dev and verify before deploying to prod.
-- New features must go behind a feature flag (see `feature_flags.yaml`).
+- No `docker` commands directly. No `python3 ymir.py`. No `sudo`. No `Dockerfile` edits.
+- Always deploy dev → verify → then prod.
+- New features must be behind a feature flag (`feature_flags.yaml`).
