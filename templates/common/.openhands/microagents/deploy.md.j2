@@ -81,8 +81,9 @@ python3 .ymir/deploy.py rollback <flag>
 
 ## Rules
 
-- Never run `docker` commands directly.
+- Never run `docker` commands directly — Docker is on the remote server, not here.
 - Never run `python3 ymir.py` — that tool lives outside this project.
-- Never modify `Dockerfile` — it is managed by ymir.
+- Never modify `Dockerfile` — it is managed by ymir, not by agents.
+- Never use `sudo` — deploy.py handles permissions itself.
 - Always deploy to dev and verify before deploying to prod.
 - New features must go behind a feature flag (see `feature_flags.yaml`).

@@ -14,6 +14,7 @@ Run from project root:
   python3 .ymir/deploy.py status                  # show current state + flag values
 """
 
+import os
 import subprocess
 import sys
 from datetime import date
@@ -24,6 +25,13 @@ try:
 except ImportError:
     subprocess.run([sys.executable, "-m", "pip", "install", "-q", "pyyaml"], check=True)
     import yaml
+
+# Never run as sudo — drop privileges if accidentally invoked with sudo
+if os.geteuid() == 0 and os.environ.get("SUDO_USER"):
+    import pwd
+    pw = pwd.getpwnam(os.environ["SUDO_USER"])
+    os.setgid(pw.pw_gid)
+    os.setuid(pw.pw_uid)
 
 ROOT = Path(__file__).parent.parent
 
