@@ -51,6 +51,10 @@ Do NOT use `tail -f` — it will be killed and take the deploy with it.
 # See current state (flags, deploy status)
 python3 .ymir/deploy.py status
 
+# HTTP health check — confirm the app is responding after deploy
+python3 .ymir/deploy.py verify        # checks dev
+python3 .ymir/deploy.py verify prod   # checks prod
+
 # Create a new flag
 python3 .ymir/deploy.py flag-add <flag> [optional description]
 

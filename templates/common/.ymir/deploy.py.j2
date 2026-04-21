@@ -5,6 +5,7 @@
 Run from project root:
   python3 .ymir/deploy.py dev                     # build + deploy to dev
   python3 .ymir/deploy.py prod                    # dark-launch to prod (all flags OFF)
+  python3 .ymir/deploy.py verify [dev|prod]       # HTTP health check (default: dev)
   python3 .ymir/deploy.py release <flag>          # turn flag ON in prod, redeploy
   python3 .ymir/deploy.py rollback <flag>         # turn flag OFF in prod, redeploy
   python3 .ymir/deploy.py activate <flag>         # turn flag ON in dev, redeploy
@@ -17,6 +18,8 @@ Run from project root:
 import os
 import subprocess
 import sys
+import urllib.request
+import urllib.error
 from datetime import date
 from pathlib import Path
 
@@ -136,7 +139,33 @@ def _nginx(c):
     _ssh(cmd, c)
 
 
+def _verify_url(url, timeout=10):
+    """Return True if url responds with 2xx/3xx."""
+    try:
+        code = urllib.request.urlopen(url, timeout=timeout).getcode()
+        return code < 400
+    except urllib.error.HTTPError as e:
+        return e.code < 400
+    except Exception:
+        return False
+
+
 # ─── commands ────────────────────────────────────────────────────────────────
+
+def do_verify(args):
+    c = _cfg()
+    env = args[0] if args else "dev"
+    if env == "prod":
+        url = f"{c.get('prod_url', c['deploy_url'])}/{c['slug']}/"
+    else:
+        url = f"{c['deploy_url']}:{c['dev_port']}/{c['slug']}/"
+    print(f"Verifying {env}: {url}")
+    if _verify_url(url):
+        print(f"✓ {env} is up")
+    else:
+        print(f"✗ {env} not responding at {url}")
+        sys.exit(1)
+
 
 def do_dev(_args):
     c, s = _cfg(), _state()
@@ -146,7 +175,14 @@ def do_dev(_args):
     if _build(c, tag) and _run_container(c, f"{c['slug']}-dev", c["dev_port"], tag, flag_states, "dev"):
         s["dev_deployed"] = True
         _save(s)
-        print(f"✓ dev  {c['deploy_url']}:{c['dev_port']}")
+        url = f"{c['deploy_url']}:{c['dev_port']}/{c['slug']}/"
+        print(f"✓ dev  {url}")
+        print("  Waiting for container to start...")
+        import time; time.sleep(5)
+        if _verify_url(url):
+            print("✓ health check passed")
+        else:
+            print("⚠ health check failed — container may still be starting, run verify to recheck")
     else:
         print("✗ deploy failed — check SSH access and Docker on deploy server")
         sys.exit(1)
@@ -161,7 +197,13 @@ def do_prod(_args):
         _nginx(c)
         s["prod_deployed"] = True
         _save(s)
-        print(f"✓ prod {c.get('prod_url', c['deploy_url'])}/{c['slug']}/")
+        url = f"{c.get('prod_url', c['deploy_url'])}/{c['slug']}/"
+        print(f"✓ prod {url}")
+        import time; time.sleep(5)
+        if _verify_url(url):
+            print("✓ health check passed")
+        else:
+            print("⚠ health check failed — nginx may still be reloading, run verify to recheck")
     else:
         print("✗ deploy failed")
         sys.exit(1)
@@ -266,6 +308,7 @@ def do_flag_delete(args):
 
 CMDS = {
     "dev": do_dev, "prod": do_prod,
+    "verify": do_verify,
     "release": do_release, "rollback": do_rollback,
     "activate": do_activate, "deactivate": do_deactivate,
     "flag-add": do_flag_add, "flag-delete": do_flag_delete,
