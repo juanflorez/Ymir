@@ -320,6 +320,11 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
     _write(PROJECTS_ROOT / ".openhands" / "microagents" / f"{name}-deploy.md", microagent_content)
     _write(project_dir / ".openhands" / "microagents" / "repo.md",
            render("common/.openhands/microagents/repo.md.j2", **ctx))
+    # Keep workspace-level repo.md generic — overwrite on every spawn so it never drifts
+    # to a specific project's git remote
+    ws_repo_src = TEMPLATES_DIR / "common/.openhands/microagents/workspace_repo.md"
+    _write(PROJECTS_ROOT / ".openhands" / "microagents" / "repo.md",
+           ws_repo_src.read_text())
 
     # Common files
     _write(project_dir / "README.md",           render("common/README.md.j2", **ctx))
