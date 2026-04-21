@@ -22,11 +22,19 @@ All deploy and flag operations go through `.ymir/deploy.py`. Run it from the pro
 
 ## After making code changes
 
-Once tests pass, deploy to dev:
+Once tests pass, deploy to dev. **The deploy takes 3-5 minutes** (build + SSH),
+so run it in the background and tail the log — do NOT run it directly or it will
+be killed by the shell timeout:
 
 ```bash
-python3 .ymir/deploy.py dev
+cd /workspace/{{ name }}
+python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 &
+echo "Deploy started (PID $!), tailing log..."
+sleep 5 && tail -f /tmp/deploy.log
 ```
+
+When you see `✓ dev` in the log, the deploy succeeded. Use Ctrl+C (send_interrupt)
+to stop the tail once done.
 
 ## Feature flag lifecycle
 
