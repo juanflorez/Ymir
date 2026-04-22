@@ -116,9 +116,10 @@ def _build(c, tag):
     )
     if ok:
         # Remove old same-slug/same-env images, keeping only the one just built
+        # New Docker format: first column is "repo:tag" combined, so read -r img rest splits correctly
         _ssh(
-            f"docker images '{c['slug']}' | grep ' {env_prefix}-' | grep -v '{date_part}' | "
-            f"while read repo vtag rest; do docker rmi \"$repo:$vtag\" 2>/dev/null; done; true", c
+            f"docker images '{c['slug']}' | tail -n +2 | grep ':{env_prefix}-' | grep -v '{date_part}'"
+            " | while read -r img rest; do docker rmi \"$img\" 2>/dev/null; done; true", c
         )
     return ok
 
