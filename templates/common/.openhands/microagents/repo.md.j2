@@ -6,10 +6,12 @@ agent: CodeActAgent
 
 ## Server: Albert (100.95.7.96)
 
-`/workspace` = `/home/dev/projects/{{ name }}/`
+Project root is at `/workspace/` (CLI mode) or `/workspace/{{ name }}/` (Web UI mode).
+Check with: `ls /workspace/` — if you see `manage.py` you're at the root; if you see `{{ name }}/` go one level deeper.
 
 ⛔ **No local server.** Never run `manage.py runserver` or any dev server.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
+⛔ **`localhost:5xxxx` ports in context are OpenHands internals** — not your app. Your app is at the deployed URL shown after `python3 .ymir/deploy.py dev`.
 
 Deploy and verify:
 ```bash
@@ -19,7 +21,16 @@ python3 .ymir/deploy.py verify
 # Errors? → python3 .ymir/deploy.py logs dev
 ```
 
-## MCP Tools
+## Reading and Writing Files
+
+Use `execute_bash` to read and modify files:
+```bash
+cat /workspace/doracollector/views.py
+```
+
+⛔ **Never use `workspace_read`, `workspace_write`, or `workspace_run`** — these SSH back to the host and will time out.
+
+## MCP Tools (browser + search only)
 
 - `web_search(query)` — DuckDuckGo
 - `web_fetch(url)` — fetch page as text
@@ -51,6 +62,7 @@ git fetch origin main && git merge origin/main
 python manage.py test   # or pytest
 
 # 5. Deploy dev + verify
+git push origin main
 cd /workspace && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
 sleep 30 && cat /tmp/deploy.log
 python3 .ymir/deploy.py activate <flag>

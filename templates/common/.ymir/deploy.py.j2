@@ -126,7 +126,7 @@ def _build(c, tag):
 
 def _envs(flag_states):
     return " ".join(
-        f"-e FEATURE_{k.upper()}={'true' if v else 'false'}"
+        f"-e FEATURE_{k.upper().replace('-', '_')}={'true' if v else 'false'}"
         for k, v in flag_states.items()
     )
 
@@ -164,7 +164,10 @@ def _wait_healthy(url, c, env="dev", retries=3, delay=10):
     import time
     for attempt in range(retries):
         if attempt > 0:
-            time.sleep(delay)
+            for _ in range(delay):
+                print(".", end="", flush=True)
+                time.sleep(1)
+            print()
         if _verify_url(url):
             return True
         if env == "dev" and _verify_remote(c):
@@ -203,7 +206,9 @@ def _warn_uncommitted():
     )
     if result.stdout.strip():
         print("⚠ uncommitted changes detected — push to git or next deploy will lose them:")
-        print("    git add -A && git commit -m '...' && git push origin main")
+        for line in result.stdout.strip().splitlines():
+            print(f"    {line}")
+        print("    → git add -A && git commit -m '...' && git push origin main")
 
 
 # ─── commands ────────────────────────────────────────────────────────────────

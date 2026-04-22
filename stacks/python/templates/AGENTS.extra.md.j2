@@ -1,0 +1,6 @@
+## Python Environment (OpenHands container)
+
+- Use `python3` — never `.venv/bin/python` (venv symlinks are broken inside the sandbox)
+- Never use `sudo` for any command — you run as a non-privileged user
+- Project root: `/workspace/` (CLI) or `/workspace/{{ name }}/` (Web UI). Run `ls /workspace/` to check.
+- Run tests with `python3 -m pytest tests/ -v` (not `pytest` directly)

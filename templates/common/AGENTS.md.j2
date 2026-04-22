@@ -2,6 +2,14 @@
 
 This project uses **Trunk-Based Development** with feature flags.
 
+## Coding Rules
+
+- **Minimum code that solves the problem.** No extra abstractions, no speculative flexibility.
+- **Surgical changes only.** Touch only what the task requires — don't improve adjacent code.
+- **No comments** unless the WHY is non-obvious. Never describe what the code does.
+- **No error handling for impossible scenarios.** Only validate at real system boundaries.
+- If your implementation is 200 lines and could be 50, rewrite it.
+
 ## Key Files
 
 - `feature_flags.yaml` — feature flag definitions
@@ -19,13 +27,23 @@ This project uses **Trunk-Based Development** with feature flags.
 
 Never implement user-facing behavior outside a flag. The flag controls whether the code path is active — the code is always deployed.
 
+## Feature Flag Env Var Convention
+
+Flags are injected as environment variables at runtime:
+
+- Flag name `my-flag` → env var `FEATURE_MY_FLAG` (uppercase, hyphens become underscores)
+- Flag name `deployment_tracker` → env var `FEATURE_DEPLOYMENT_TRACKER`
+
+Always use `feature_enabled("my-flag")` from `flags.py` — never read `os.environ` directly for flags. The helper normalises the name correctly.
+
 ## Workflow
 
 1. Write the BDD scenario in `tests/features/` first.
 2. Write the unit test (red).
 3. Implement behind the flag (green).
 4. Refactor.
-5. Report: "Used flag: `<flag_name>`" or "Created flag: `<flag_name>`".
+5. Verify: run tests, then deploy and hit the health endpoint.
+6. Report: "Used flag: `<flag_name>`" or "Created flag: `<flag_name>`".
 
 ## Running Tests (container environment)
 
@@ -77,6 +95,7 @@ All deploy and flag operations go through `.ymir/deploy.py` — run from the pro
 
 ```bash
 python3 .ymir/deploy.py dev                # build + deploy to dev
+python3 .ymir/deploy.py verify dev         # health check (run after every deploy)
 python3 .ymir/deploy.py prod               # dark-launch to prod (flags OFF)
 python3 .ymir/deploy.py release <flag>     # turn flag ON in prod
 python3 .ymir/deploy.py rollback <flag>    # turn flag OFF in prod
@@ -85,4 +104,14 @@ python3 .ymir/deploy.py deactivate <flag>  # turn flag OFF in dev
 python3 .ymir/deploy.py status             # current state + flag values
 ```
 
-Do NOT run docker commands or `python3 ymir.py` directly.
+Do NOT run docker commands or modify `.ymir/` files directly — use deploy.py commands only.
+
+## What NOT to Do
+
+- Do not use `sudo` for anything.
+- Do not create feature branches — commit directly to `main` behind a flag.
+- Do not run docker commands directly.
+- Do not modify `.ymir/` config files — use the deploy.py subcommands.
+- Do not read `FEATURE_*` env vars directly — use `feature_enabled()`.
+- Do not comment out or bypass feature flag checks — ever. The flag gates are real; removing them ships unreleased code to prod.
+- Do not skip `git push` after committing — local-only commits are lost on container restart.
