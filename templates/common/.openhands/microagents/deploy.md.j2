@@ -18,28 +18,21 @@ triggers:
 
 # Deploying {{ name }}
 
-**STOP: No local server. Do NOT run `manage.py runserver`.**
-**Deploy = SSH + Docker build on Carlos via `.ymir/deploy.py`.**
-
-## Deploy to dev (takes 2-3 min — run detached)
+Deploy = SSH + Docker build on Carlos via `.ymir/deploy.py`. Run detached (takes 2-3 min):
 
 ```bash
-cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
+cd /workspace && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
 sleep 30 && cat /tmp/deploy.log   # repeat until ✓ health check passed or ✗
 ```
 
-Dev app is at `http://100.68.2.106:<port>/` — served at root, **no slug prefix**.
+Dev app: `http://100.68.2.106:<port>/` — served at root, no slug prefix.
 
 ## Diagnosing errors
-
-**Always use logs — never synthetic test data:**
 
 ```bash
 python3 .ymir/deploy.py logs dev        # tail 50 lines of container output
 python3 .ymir/deploy.py logs dev 200    # tail 200 lines
 ```
-
-Read the actual traceback. Fix the specific error. Re-test with the real failing scenario.
 
 ## Commands
 
@@ -55,10 +48,3 @@ python3 .ymir/deploy.py prod                  # dark-launch (flags OFF)
 python3 .ymir/deploy.py release <flag>        # flag ON in prod
 python3 .ymir/deploy.py rollback <flag>       # flag OFF in prod
 ```
-
-## Rules
-
-- No `docker` commands directly. No `python3 ymir.py`. No `sudo`. No `Dockerfile` edits.
-- Always deploy dev → verify → then prod.
-- New features must be behind a feature flag (`feature_flags.yaml`).
-- Claim done only after verifying with the **real failing input**, not a synthetic file.

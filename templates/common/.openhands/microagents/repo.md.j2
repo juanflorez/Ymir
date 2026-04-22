@@ -6,9 +6,18 @@ agent: CodeActAgent
 
 ## Server: Albert (100.95.7.96)
 
-`/workspace` = project root on host (`/home/dev/projects/{{ name }}/`).
+`/workspace` = `/home/dev/projects/{{ name }}/`
 
-⛔ **No local server.** Never run `manage.py runserver` or any local server. Deploy via `.ymir/deploy.py dev`.
+⛔ **No local server.** Never run `manage.py runserver` or any dev server.
+⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
+
+Deploy and verify:
+```bash
+cd /workspace && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
+sleep 30 && cat /tmp/deploy.log   # repeat until ✓ health check passed or ✗
+python3 .ymir/deploy.py verify
+# Errors? → python3 .ymir/deploy.py logs dev
+```
 
 ## MCP Tools
 
@@ -37,18 +46,17 @@ git checkout -b feat/<short-name>
 # 3. Flag (if new feature)
 python3 .ymir/deploy.py flag-add <flag> "description"
 
-# 4. Implement, test, merge main often
+# 4. Implement + test
 git fetch origin main && git merge origin/main
 python manage.py test   # or pytest
 
-# 5. Deploy + verify dev
-cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
-sleep 30 && cat /tmp/deploy.log   # repeat until ✓ health check passed or ✗
+# 5. Deploy dev + verify
+cd /workspace && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
+sleep 30 && cat /tmp/deploy.log
 python3 .ymir/deploy.py activate <flag>
-python3 .ymir/deploy.py verify    # dev URL: http://100.68.2.106:<port>/ (root, no slug prefix)
-# Errors? → python3 .ymir/deploy.py logs dev
+python3 .ymir/deploy.py verify    # dev URL: http://100.68.2.106:<port>/
 
-# 6. Merge to main + prod
+# 6. Merge + prod
 git checkout main && git merge feat/<short-name> && git push origin main
 nohup python3 .ymir/deploy.py prod > /tmp/deploy.log 2>&1 & disown
 sleep 30 && cat /tmp/deploy.log

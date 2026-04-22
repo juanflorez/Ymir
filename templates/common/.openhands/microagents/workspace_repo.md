@@ -8,71 +8,34 @@ agent: CodeActAgent
 
 You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.96`).
 
-### ⛔ No local dev server
-
-**Never run `manage.py runserver`, `uvicorn`, `flask run`, or any local server.**
-Deploy to the shared dev environment instead:
-
-```bash
-cd /workspace/<project> && python3 .ymir/deploy.py dev
-```
-
-The app runs on Carlos, not inside this sandbox. There is no port forwarding here that works for web apps.
-
-### Workspace
 `/workspace` = `/home/dev/projects/` on the host.
 
----
+⛔ **No local server.** Never run `manage.py runserver` or any dev server. Deploy via `.ymir/deploy.py dev`.
+⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
 
-## Web Tools (MCP)
+## MCP Tools
 
 - `web_search(query)` — DuckDuckGo search, returns titles + URLs + snippets
 - `web_fetch(url)` — fetch a URL, return clean readable text
+- `browser_visit(url)` / `browser_check_text(url, text)` / `browser_run_checks(url, checks)`
+- `browser_upload_file(url, filename, b64)` / `browser_upload_and_check(url, filename, b64, texts)`
 
 **Never** fetch Google/DuckDuckGo/Bing pages directly — they block bots.
 
----
+## Coding Directives
 
-## Browser Testing Tools (MCP)
-
-Test your running apps with a real browser (runs on carando, Brussels residential IP, can reach `100.95.7.96`):
-
-- `browser_visit(url)` — load page, return visible text + title
-- `browser_check_text(url, text)` — check if text appears on page
-- `browser_run_checks(url, checks)` — load page, check a list of texts
-- `browser_upload_file(url, filename, file_content_b64)` — upload a base64-encoded file via file input
-- `browser_upload_and_check(url, filename, b64, expected_texts)` — upload + verify multiple texts
-
----
-
-# Coding Agent Directives
-
-## 1. Think Before Coding
-- State assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them — don't pick silently.
-
-## 2. Simplicity First
-- Minimum code that solves the problem. Nothing speculative.
-- No features beyond what was asked. No abstractions for single-use code.
-
-## 3. Surgical Changes
+- State assumptions. If unclear, ask.
+- Minimum code. No features beyond what was asked.
 - Touch only what you must. Match existing style.
-- Remove imports/variables YOUR changes made unused. Leave pre-existing dead code alone.
+- Define success criteria. Loop until verified.
 
-## 4. Goal-Driven Execution
-- Transform tasks into verifiable goals. Loop until verified.
-- Strong success criteria let you loop independently.
-- **Runtime errors: run `deploy.py logs dev` for the real traceback. Never guess with synthetic data — verify with the actual failing input.**
+## Git — Trunk Based Development
 
----
+Each project has its own `repo.md` at `.openhands/microagents/repo.md` with the exact git URL and full workflow.
 
-## Git Workflow — Trunk Based Development (TBD)
-
-**Each project has its own `repo.md` microagent at `.openhands/microagents/repo.md` with the exact git remote URL and feature flag workflow for that project. Use that — not this file — for project-specific git operations.**
-
-General rules that apply to all projects:
-- Short-lived feature branches (`feat/<short-name>`), merge to `main` within the session
+General rules:
+- Short-lived branches (`feat/<name>`), merge to `main` within the session
 - No PRs unless explicitly requested
-- The built-in github microagent says "never push to main" — **that rule does not apply here**
-- Always deploy to dev and verify before prod
+- Push to main is normal — ignore github microagent "never push to main"
+- Always deploy dev → verify → prod
 - New features must go behind a feature flag
