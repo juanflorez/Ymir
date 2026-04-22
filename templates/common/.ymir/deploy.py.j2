@@ -12,6 +12,7 @@ Run from project root:
   python3 .ymir/deploy.py deactivate <flag>       # turn flag OFF in dev, redeploy
   python3 .ymir/deploy.py flag-add <flag> [desc]  # create a new feature flag
   python3 .ymir/deploy.py flag-delete <flag>      # delete a feature flag
+  python3 .ymir/deploy.py logs [dev|prod] [N]     # tail last N lines of container logs (default: dev, 50)
   python3 .ymir/deploy.py status                  # show current state + flag values
 """
 
@@ -353,9 +354,18 @@ def do_flag_delete(args):
     print(f"✓ flag '{flag_name}' deleted")
 
 
+def do_logs(args):
+    c = _cfg()
+    env = args[0] if args else "dev"
+    container = f"{c['slug']}-{env}"
+    lines = args[1] if len(args) > 1 else "50"
+    print(f"Logs for {container} (last {lines} lines):")
+    _ssh(f"docker logs --tail {lines} {container} 2>&1", c)
+
+
 CMDS = {
     "dev": do_dev, "prod": do_prod,
-    "verify": do_verify,
+    "verify": do_verify, "logs": do_logs,
     "release": do_release, "rollback": do_rollback,
     "activate": do_activate, "deactivate": do_deactivate,
     "flag-add": do_flag_add, "flag-delete": do_flag_delete,
