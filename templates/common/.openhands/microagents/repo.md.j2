@@ -6,13 +6,9 @@ agent: CodeActAgent
 
 ## Server: Albert (100.95.7.96)
 
-```bash
-echo $port           # your pre-allocated forwarded port
-curl http://localhost:$port/
-# External: http://100.95.7.96:$port/
-```
+`/workspace` = project root on host (`/home/dev/projects/{{ name }}/`).
 
-`/workspace` = `/home/dev/projects/` on host.
+⛔ **No local server.** Never run `manage.py runserver` or any local server. Deploy via `.ymir/deploy.py dev`.
 
 ## MCP Tools
 
