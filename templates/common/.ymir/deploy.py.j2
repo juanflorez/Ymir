@@ -149,6 +149,18 @@ def _nginx(c):
     _ssh(cmd, c)
 
 
+def _wait_healthy(url, c, env="dev", retries=3, delay=10):
+    import time
+    for attempt in range(retries):
+        if attempt > 0:
+            time.sleep(delay)
+        if _verify_url(url):
+            return True
+        if env == "dev" and _verify_remote(url, c):
+            return True
+    return False
+
+
 def _verify_url(url, timeout=10):
     """Return True if url responds with 2xx/3xx."""
     try:
@@ -206,12 +218,11 @@ def do_dev(_args):
         _save(s)
         url = f"{c['deploy_url']}:{c['dev_port']}/{c['slug']}/"
         print(f"✓ dev  {url}")
-        print("  Waiting for container to start...")
-        import time; time.sleep(5)
-        if _verify_url(url) or _verify_remote(url, c):
+        print("  Waiting for container to start (up to 30s)...")
+        if _wait_healthy(url, c, env="dev"):
             print("✓ health check passed")
         else:
-            print("⚠ health check failed — container may still be starting, run verify to recheck")
+            print("✗ health check failed — container not responding after 30s")
     else:
         print("✗ deploy failed — check SSH access and Docker on deploy server")
         sys.exit(1)
@@ -228,11 +239,11 @@ def do_prod(_args):
         _save(s)
         url = f"{c.get('prod_url', c['deploy_url'])}/{c['slug']}/"
         print(f"✓ prod {url}")
-        import time; time.sleep(5)
-        if _verify_url(url):
+        print("  Waiting for container to start (up to 30s)...")
+        if _wait_healthy(url, c, env="prod"):
             print("✓ health check passed")
         else:
-            print("⚠ health check failed — nginx may still be reloading, run verify to recheck")
+            print("✗ health check failed — container not responding after 30s")
     else:
         print("✗ deploy failed")
         sys.exit(1)
