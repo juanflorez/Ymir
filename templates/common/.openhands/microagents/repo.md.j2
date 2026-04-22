@@ -47,9 +47,10 @@ python manage.py test   # or pytest
 
 # 5. Deploy + verify dev
 cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
-sleep 30 && cat /tmp/deploy.log
+sleep 30 && cat /tmp/deploy.log   # repeat until ✓ health check passed or ✗
 python3 .ymir/deploy.py activate <flag>
-python3 .ymir/deploy.py verify
+python3 .ymir/deploy.py verify    # dev URL: http://100.68.2.106:<port>/ (root, no slug prefix)
+# Errors? → python3 .ymir/deploy.py logs dev
 
 # 6. Merge to main + prod
 git checkout main && git merge feat/<short-name> && git push origin main

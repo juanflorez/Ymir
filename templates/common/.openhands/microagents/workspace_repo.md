@@ -68,6 +68,7 @@ Test your running apps with a real browser (runs on carando, Brussels residentia
 ## 4. Goal-Driven Execution
 - Transform tasks into verifiable goals. Loop until verified.
 - Strong success criteria let you loop independently.
+- **Runtime errors: run `deploy.py logs dev` for the real traceback. Never guess with synthetic data — verify with the actual failing input.**
 
 ---
 

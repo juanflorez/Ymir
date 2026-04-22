@@ -21,27 +21,39 @@ triggers:
 **STOP: No local server. Do NOT run `manage.py runserver`.**
 **Deploy = SSH + Docker build on Carlos via `.ymir/deploy.py`.**
 
-## Deploy to dev (takes 3-5 min — run detached)
+## Deploy to dev (takes 2-3 min — run detached)
 
 ```bash
-cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown && echo "PID $!"
-sleep 30 && cat /tmp/deploy.log   # repeat until ✓ or ✗
+cd /workspace/{{ name }} && nohup python3 .ymir/deploy.py dev > /tmp/deploy.log 2>&1 & disown
+sleep 30 && cat /tmp/deploy.log   # repeat until ✓ health check passed or ✗
 ```
 
-After deploy: `python3 .ymir/deploy.py verify` confirms app is responding.
+Dev app is at `http://100.68.2.106:<port>/` — served at root, **no slug prefix**.
+
+## Diagnosing errors
+
+**Always use logs — never synthetic test data:**
+
+```bash
+python3 .ymir/deploy.py logs dev        # tail 50 lines of container output
+python3 .ymir/deploy.py logs dev 200    # tail 200 lines
+```
+
+Read the actual traceback. Fix the specific error. Re-test with the real failing scenario.
 
 ## Commands
 
 ```bash
-python3 .ymir/deploy.py status             # state + flag values
-python3 .ymir/deploy.py verify [dev|prod]  # HTTP health check
+python3 .ymir/deploy.py status                # state + flag values
+python3 .ymir/deploy.py verify [dev|prod]     # HTTP health check
+python3 .ymir/deploy.py logs [dev|prod] [N]   # tail container logs (default: dev, 50 lines)
 python3 .ymir/deploy.py flag-add <flag> [desc]
 python3 .ymir/deploy.py flag-delete <flag>
-python3 .ymir/deploy.py activate <flag>    # flag ON in dev
-python3 .ymir/deploy.py deactivate <flag>  # flag OFF in dev
-python3 .ymir/deploy.py prod               # dark-launch (flags OFF)
-python3 .ymir/deploy.py release <flag>     # flag ON in prod
-python3 .ymir/deploy.py rollback <flag>    # flag OFF in prod
+python3 .ymir/deploy.py activate <flag>       # flag ON in dev
+python3 .ymir/deploy.py deactivate <flag>     # flag OFF in dev
+python3 .ymir/deploy.py prod                  # dark-launch (flags OFF)
+python3 .ymir/deploy.py release <flag>        # flag ON in prod
+python3 .ymir/deploy.py rollback <flag>       # flag OFF in prod
 ```
 
 ## Rules
@@ -49,3 +61,4 @@ python3 .ymir/deploy.py rollback <flag>    # flag OFF in prod
 - No `docker` commands directly. No `python3 ymir.py`. No `sudo`. No `Dockerfile` edits.
 - Always deploy dev → verify → then prod.
 - New features must be behind a feature flag (`feature_flags.yaml`).
+- Claim done only after verifying with the **real failing input**, not a synthetic file.
