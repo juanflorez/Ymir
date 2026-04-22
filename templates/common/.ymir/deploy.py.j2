@@ -156,7 +156,7 @@ def _wait_healthy(url, c, env="dev", retries=3, delay=10):
             time.sleep(delay)
         if _verify_url(url):
             return True
-        if env == "dev" and _verify_remote(url, c):
+        if env == "dev" and _verify_remote(c):
             return True
     return False
 
@@ -172,18 +172,27 @@ def _verify_url(url, timeout=10):
         return False
 
 
-def _verify_remote(url, c):
-    """Verify by SSHing to the deploy host and curling locally.
-    Used as fallback when the sandbox can't resolve the deploy hostname
-    (e.g. Tailscale DNS not available inside Docker sandbox)."""
+def _verify_remote(c):
+    """Verify by SSHing to the deploy host and curling localhost.
+    Used as fallback when the sandbox can't resolve the deploy hostname."""
     result = subprocess.run(
         ["ssh", "-i", str(_key(c)), "-o", "StrictHostKeyChecking=no",
          "-o", "ConnectTimeout=15",
          f"{c['deploy_user']}@{c['deploy_host']}",
-         f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{c['dev_port']}/{c['slug']}/ 2>/dev/null || echo 000"],
+         f"curl -s -o /dev/null -w '%{{http_code}}' http://localhost:{c['dev_port']}/ 2>/dev/null || echo 000"],
         capture_output=True, text=True
     )
-    return result.stdout.strip() == "200"
+    return result.stdout.strip() in ("200", "301", "302")
+
+
+def _warn_uncommitted():
+    result = subprocess.run(
+        ["git", "-C", str(ROOT), "status", "--porcelain"],
+        capture_output=True, text=True
+    )
+    if result.stdout.strip():
+        print("⚠ uncommitted changes detected — push to git or next deploy will lose them:")
+        print("    git add -A && git commit -m '...' && git push origin main")
 
 
 # ─── commands ────────────────────────────────────────────────────────────────
@@ -194,18 +203,15 @@ def do_verify(args):
     if env == "prod":
         url = f"{c.get('prod_url', c['deploy_url'])}/{c['slug']}/"
     else:
-        url = f"{c['deploy_url']}:{c['dev_port']}/{c['slug']}/"
+        url = f"{c['deploy_url']}:{c['dev_port']}/"
     print(f"Verifying {env}: {url}")
     if _verify_url(url):
         print(f"✓ {env} is up")
+    elif env == "dev" and _verify_remote(c):
+        print(f"✓ {env} is up (verified via deploy host)")
     else:
-        # Fallback: sandbox may not have Tailscale DNS — check from deploy host directly
-        print(f"  Direct check failed, trying via SSH to deploy host...")
-        if env == "dev" and _verify_remote(url, c):
-            print(f"✓ {env} is up (verified via deploy host)")
-        else:
-            print(f"✗ {env} not responding at {url}")
-            sys.exit(1)
+        print(f"✗ {env} not responding at {url}")
+        sys.exit(1)
 
 
 def do_dev(_args):
@@ -216,13 +222,14 @@ def do_dev(_args):
     if _build(c, tag) and _run_container(c, f"{c['slug']}-dev", c["dev_port"], tag, flag_states, "dev"):
         s["dev_deployed"] = True
         _save(s)
-        url = f"{c['deploy_url']}:{c['dev_port']}/{c['slug']}/"
+        url = f"{c['deploy_url']}:{c['dev_port']}/"
         print(f"✓ dev  {url}")
         print("  Waiting for container to start (up to 30s)...")
         if _wait_healthy(url, c, env="dev"):
             print("✓ health check passed")
         else:
             print("✗ health check failed — container not responding after 30s")
+        _warn_uncommitted()
     else:
         print("✗ deploy failed — check SSH access and Docker on deploy server")
         sys.exit(1)
