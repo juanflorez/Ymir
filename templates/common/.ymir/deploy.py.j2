@@ -109,9 +109,18 @@ def _build(c, tag):
     if not _sync(c):
         print("  sync failed")
         return False
-    return _ssh(
+    env_prefix = tag.split(":")[1].split("-")[0]  # "dev" or "prod"
+    date_part = tag.split(f":{env_prefix}-")[1]   # e.g. "2026-04-22"
+    ok = _ssh(
         f"docker build -t {tag} /tmp/{c['slug']}-build/ && rm -rf /tmp/{c['slug']}-build/", c
     )
+    if ok:
+        # Remove old same-slug/same-env images, keeping only the one just built
+        _ssh(
+            f"docker images '{c['slug']}' | grep ' {env_prefix}-' | grep -v '{date_part}' | "
+            f"while read repo vtag rest; do docker rmi \"$repo:$vtag\" 2>/dev/null; done; true", c
+        )
+    return ok
 
 
 def _envs(flag_states):
