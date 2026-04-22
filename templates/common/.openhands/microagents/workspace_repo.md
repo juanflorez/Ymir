@@ -8,22 +8,16 @@ agent: CodeActAgent
 
 You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.96`).
 
-### Discovering your port
+### ⛔ No local dev server
 
-Run this at the start of any task that involves a web server:
+**Never run `manage.py runserver`, `uvicorn`, `flask run`, or any local server.**
+Deploy to the shared dev environment instead:
 
 ```bash
-echo $port
+cd /workspace/<project> && python3 .ymir/deploy.py dev
 ```
 
-This prints your **pre-allocated port** — the only port that is forwarded to the outside world.
-The host port equals the container port (1:1 mapping), so:
-
-- Start your server on `$port`: `uvicorn main:app --host 0.0.0.0 --port $port &`
-- Test internally: `curl http://localhost:$port/`
-- External URL (what the user sees): `http://100.95.7.96:$port/`
-
-**Never hardcode a port number.** Always use `$port`.
+The app runs on Carlos, not inside this sandbox. There is no port forwarding here that works for web apps.
 
 ### Workspace
 `/workspace` = `/home/dev/projects/` on the host.
