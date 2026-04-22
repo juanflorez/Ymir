@@ -4,3 +4,65 @@ INFO:     Application startup complete.
 INFO:     Uvicorn running on http://0.0.0.0:8766 (Press CTRL+C to quit)
 INFO:     127.0.0.1:59888 - "GET /sse HTTP/1.1" 200 OK
 INFO:     10.1.41.243:48896 - "GET /sse HTTP/1.1" 200 OK
+Traceback (most recent call last):
+  File "/home/claude/albert/ci_cd/ymir_mcp.py", line 13, in <module>
+    mcp = FastMCP("ymir", host="0.0.0.0", port=8766)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/mcp/server/fastmcp/server.py", line 185, in __init__
+    self.settings = Settings(
+                    ^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/main.py", line 215, in __init__
+    else __pydantic_self__.__class__._settings_init_sources(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/main.py", line 395, in _settings_init_sources
+    dotenv_settings = DotEnvSettingsSource(
+                      ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 56, in __init__
+    super().__init__(
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/env.py", line 72, in __init__
+    self.env_vars = self._load_env_vars()
+                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 69, in _load_env_vars
+    return self._read_env_files()
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 106, in _read_env_files
+    if env_path.is_file() or env_path.is_fifo():
+       ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 894, in is_file
+    return S_ISREG(self.stat().st_mode)
+                   ^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 842, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '.env'
+Traceback (most recent call last):
+  File "/home/claude/albert/ci_cd/ymir_mcp.py", line 13, in <module>
+    mcp = FastMCP("ymir", host="0.0.0.0", port=8766)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/mcp/server/fastmcp/server.py", line 185, in __init__
+    self.settings = Settings(
+                    ^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/main.py", line 215, in __init__
+    else __pydantic_self__.__class__._settings_init_sources(
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/main.py", line 395, in _settings_init_sources
+    dotenv_settings = DotEnvSettingsSource(
+                      ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 56, in __init__
+    super().__init__(
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/env.py", line 72, in __init__
+    self.env_vars = self._load_env_vars()
+                    ^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 69, in _load_env_vars
+    return self._read_env_files()
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/claude/.local/lib/python3.12/site-packages/pydantic_settings/sources/providers/dotenv.py", line 106, in _read_env_files
+    if env_path.is_file() or env_path.is_fifo():
+       ^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 894, in is_file
+    return S_ISREG(self.stat().st_mode)
+                   ^^^^^^^^^^^
+  File "/usr/lib/python3.12/pathlib.py", line 842, in stat
+    return os.stat(self, follow_symlinks=follow_symlinks)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+PermissionError: [Errno 13] Permission denied: '.env'

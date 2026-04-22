@@ -11,7 +11,7 @@ services:
     environment:
       - APP_ENV=local
 {% for flag in flags %}
-      - FEATURE_{{ flag.upper() }}=false
+      - FEATURE_{{ flag.upper().replace('-', '_') }}=false
 {% endfor %}
     volumes:
 {% if primary_stack == "django" %}

@@ -59,7 +59,7 @@ resource "docker_container" "app" {
   env = concat(
     ["APP_ENV=${var.environment}"],
 {% for flag in flags %}
-    ["FEATURE_{{ flag.upper() }}=${var.feature_{{ flag }}}"],
+    ["FEATURE_{{ flag.upper().replace('-', '_') }}=${var.feature_{{ flag }}}"],
 {% endfor %}
   )
 

@@ -36,7 +36,14 @@ SUPPORTED_STACKS = {"python", "django", "flask"}
 # ---------------------------------------------------------------------------
 
 def jinja_env() -> Environment:
-    return Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), keep_trailing_newline=True)
+    stacks_dirs = [
+        str(CI_CD_ROOT / "stacks" / stack / "templates")
+        for stack in SUPPORTED_STACKS
+    ]
+    return Environment(
+        loader=FileSystemLoader([str(TEMPLATES_DIR)] + stacks_dirs),
+        keep_trailing_newline=True,
+    )
 
 
 def render(template_path: str, **ctx) -> str:
@@ -104,7 +111,7 @@ def build_and_push_image(project_dir: Path, tag: str) -> None:
 def flag_env_vars(flags: dict) -> str:
     """Convert feature flags dict to Docker -e arguments string."""
     return " ".join(
-        f"-e FEATURE_{k.upper()}={'true' if v else 'false'}"
+        f"-e FEATURE_{k.upper().replace('-', '_')}={'true' if v else 'false'}"
         for k, v in flags.items()
     )
 
@@ -152,7 +159,13 @@ def init(name: str, stack: str, description: str, flags: tuple, use_poetry: bool
     # --- Render common files ---
     _write(project_dir / "README.md", render("common/README.md.j2", **ctx))
     _write(project_dir / "CLAUDE.md", render("common/CLAUDE.md.j2", **ctx))
-    _write(project_dir / "AGENTS.md", render("common/AGENTS.md.j2", **ctx))
+    agents_md = render("common/AGENTS.md.j2", **ctx)
+    extra_tpl = f"{primary_stack}/AGENTS.extra.md.j2"
+    try:
+        agents_md += "\n" + render(extra_tpl, **ctx)
+    except Exception:
+        pass
+    _write(project_dir / "AGENTS.md", agents_md)
     _write(project_dir / ".gitignore", render("common/.gitignore.j2", **ctx))
     _write(project_dir / "feature_flags.yaml",
            render("common/feature_flags.yaml.j2", **ctx))

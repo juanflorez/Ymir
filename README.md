@@ -26,8 +26,21 @@ and manages their full deployment lifecycle through feature flags on a remote Do
 |------|------|
 | Write code, run tests | OpenHands (works inside the project dir) |
 | spawn / deploy / release | Ymir CLI (run by Claude Code or developer) |
+| git commit / push | OpenHands WebUI or CLI (both work — see below) |
 
 `AGENTS.md` inside each spawned project explicitly tells OpenHands not to run docker or ymir commands.
+
+### OpenHands Git Access (Albert-specific)
+
+OpenHands runtime containers run as root, but git's `safe.directory` check blocks operations on repos owned by a different UID. This is resolved at the Albert infrastructure level — no per-project configuration needed:
+
+- `/home/dev/projects/.gitconfig` contains `[safe] directory = *`
+- The OpenHands service passes `SANDBOX_ENV_GIT_CONFIG_GLOBAL=/workspace/.gitconfig` to all runtime containers
+
+If git stops working in OpenHands sessions, check:
+1. `/home/dev/projects/.gitconfig` exists with `[safe]\n    directory = *`
+2. `/etc/systemd/system/openhands.service` has `-e SANDBOX_ENV_GIT_CONFIG_GLOBAL=/workspace/.gitconfig`
+3. Service is running: `sudo systemctl status openhands`
 
 ---
 
