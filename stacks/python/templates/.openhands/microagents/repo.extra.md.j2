@@ -1,0 +1,6 @@
+## Python Notes
+
+- Always exclude `.venv` from file searches: `find /workspace/{{ name }} -name "*.py" -not -path "*/.venv/*"`
+- Run tests with `python3 -m pytest tests/ -v` (not `pytest` directly)
+- Use `python3` — never `.venv/bin/python` (venv symlinks are broken inside the sandbox)
+- Format before committing: `ruff format .`

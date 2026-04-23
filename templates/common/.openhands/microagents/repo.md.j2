@@ -6,11 +6,12 @@ agent: CodeActAgent
 
 ## Server: Albert (100.95.7.96)
 
-Project root is at `/workspace/` (CLI mode) or `/workspace/{{ name }}/` (Web UI mode).
-Check with: `ls /workspace/` — if you see `manage.py` you're at the root; if you see `{{ name }}/` go one level deeper.
+Project root is at `/workspace/{{ name }}/` (Web UI mode) or `/workspace/` (CLI mode).
+Check with: `ls /workspace/` — if you see `{{ name }}/`, cd into it first.
 
-⛔ **No local server.** Never run `manage.py runserver` or any dev server.
+⛔ **No local server.** Never run a dev server locally.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
+⛔ **Never test file uploads with curl.** Use `browser_upload_file` — curl bypasses the HTML form and hides field name mismatches.
 ⛔ **`localhost:5xxxx` ports in context are OpenHands internals** — not your app. Your app is at the deployed URL shown after `python3 .ymir/deploy.py dev`.
 
 Deploy and verify:
@@ -26,11 +27,10 @@ python3 .ymir/deploy.py verify
 
 Use `execute_bash` to read and modify files:
 ```bash
-cat /workspace/doracollector/views.py
+cat /workspace/{{ name }}/views.py
 ```
 
 ⛔ **Never use `workspace_read`, `workspace_write`, or `workspace_run`** — these SSH back to the host and will time out.
-⛔ **Always exclude `.venv` from file searches** — `find /workspace/{{ name }} -name "*.py" -not -path "*/.venv/*"`
 
 ## MCP Tools (browser + search only)
 
@@ -61,7 +61,7 @@ python3 .ymir/deploy.py flag-add <flag> "description"
 
 # 4. Implement + test
 git fetch origin main && git merge origin/main
-python manage.py test   # or pytest
+# run the project's test suite (see stack-specific notes below)
 
 # 5. Deploy dev + verify
 git push origin main

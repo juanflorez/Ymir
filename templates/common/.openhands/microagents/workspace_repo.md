@@ -10,8 +10,10 @@ You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.9
 
 `/workspace` = `/home/dev/projects/` on the host.
 
-⛔ **No local server.** Never run `manage.py runserver` or any dev server. Deploy via `.ymir/deploy.py dev`.
+⛔ **No local server.** Never run a dev server locally. Deploy via `.ymir/deploy.py dev`.
+⛔ **Never background deploy.py with `nohup ... & disown` + `sleep`** — the sandbox kills silent commands after 10s. Run deploy.py directly.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
+⛔ **Never test file uploads with curl.** Use `browser_upload_file` — curl bypasses the HTML form and hides field name mismatches.
 
 ## MCP Tools
 
