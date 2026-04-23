@@ -14,6 +14,23 @@ You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.9
 ⛔ **Never background deploy.py with `nohup ... & disown` + `sleep`** — the sandbox kills silent commands after 10s. Run deploy.py directly.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
 ⛔ **Never test file uploads with curl.** Use `browser_upload_file` — curl bypasses the HTML form and hides field name mismatches.
+⛔ **Clean up after yourself.** Delete test files you create in `/workspace/` before finishing.
+
+## Active Projects
+{% if projects %}
+| Project | Dev URL |
+|---------|---------|
+{% for p in projects %}| {{ p.name }} | http://100.68.2.106:{{ p.dev_port }}/ |
+{% endfor %}{% else %}
+_(no projects yet)_
+{% endif %}
+
+## File Sharing with Users
+
+Users **cannot attach files via chat**. If the user says "use the attached file" or "here is the file":
+1. Tell them to use the OpenHands file explorer (folder icon in the top-left) to drag and drop the file into `/workspace/`
+2. Or they can run on their local machine: `scp localfile.xlsx juan@100.95.7.96:/home/dev/projects/filename.xlsx`
+3. Once the file is in `/workspace/`, you can read it directly at that path
 
 ## MCP Tools
 

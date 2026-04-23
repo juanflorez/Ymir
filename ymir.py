@@ -195,6 +195,25 @@ def sync_to_workspace(project_dir: Path) -> bool:
     return False
 
 
+def _active_projects() -> list:
+    """Return [{name, dev_port}] for all projects that have a .ymir/config.yaml."""
+    projects = []
+    for state_file in sorted(STATE_DIR.glob("*.yaml")):
+        name = state_file.stem
+        config_path = Path(PROJECTS_ROOT) / name / ".ymir" / "config.yaml"
+        if config_path.exists():
+            cfg = yaml.safe_load(config_path.read_text()) or {}
+            dev_port = cfg.get("dev_port")
+            if dev_port:
+                projects.append({"name": name, "dev_port": dev_port})
+    return projects
+
+
+def _render_workspace_repo() -> str:
+    return render("common/.openhands/microagents/workspace_repo.md.j2",
+                  projects=_active_projects())
+
+
 def _require_deploy_config() -> None:
     if not DEPLOY_HOST:
         raise click.ClickException(
@@ -320,13 +339,16 @@ def spawn(name: str, stack: str, description: str, flags: tuple, use_poetry: boo
     microagent_content = render("common/.openhands/microagents/deploy.md.j2", **ctx)
     _write(project_dir / ".openhands" / "microagents" / "deploy.md", microagent_content)
     _write(PROJECTS_ROOT / ".openhands" / "microagents" / f"{name}-deploy.md", microagent_content)
-    _write(project_dir / ".openhands" / "microagents" / "repo.md",
-           render("common/.openhands/microagents/repo.md.j2", **ctx))
-    # Keep workspace-level repo.md generic — overwrite on every spawn so it never drifts
-    # to a specific project's git remote
-    ws_repo_src = TEMPLATES_DIR / "common/.openhands/microagents/workspace_repo.md"
+    repo_md = render("common/.openhands/microagents/repo.md.j2", **ctx)
+    extra_tpl_name = ".openhands/microagents/repo.extra.md.j2"
+    extra_path = YMIR_ROOT / "stacks" / primary_stack / "templates" / extra_tpl_name
+    if extra_path.exists():
+        extra_ctx = {k: v for k, v in ctx.items() if k != "stack"}
+        repo_md += "\n" + render(extra_tpl_name, stack=primary_stack, **extra_ctx)
+    _write(project_dir / ".openhands" / "microagents" / "repo.md", repo_md)
+    # Workspace-level repo.md — re-rendered on every spawn to include current project list
     _write(PROJECTS_ROOT / ".openhands" / "microagents" / "repo.md",
-           ws_repo_src.read_text())
+           _render_workspace_repo())
 
     # Common files
     _write(project_dir / "README.md",           render("common/README.md.j2", **ctx))
@@ -664,6 +686,70 @@ def list_stacks() -> None:
     for name, mod in sorted(STACKS.items()):
         keywords = ", ".join(getattr(mod, "KEYWORDS", []))
         click.echo(f"  {name:15s}  keywords: {keywords}")
+
+
+# ---------------------------------------------------------------------------
+# sync-microagent
+# ---------------------------------------------------------------------------
+
+@cli.command("sync-microagent")
+@click.argument("project")
+def sync_microagent(project: str) -> None:
+    """Re-render and write the project's repo.md microagent from current templates."""
+    state_file = STATE_DIR / f"{project}.yaml"
+    if not state_file.exists():
+        click.echo(f"Unknown project: {project}", err=True)
+        raise SystemExit(1)
+    state = yaml.safe_load(state_file.read_text()) or {}
+    project_dir = Path(PROJECTS_ROOT) / project
+    primary_stack = state.get("stack", "python")
+    ctx = dict(
+        name=project,
+        app=project.lower().replace("-", "_"),
+        stack=primary_stack,
+        primary_stack=primary_stack,
+        description=state.get("description", ""),
+        github_org=GITHUB_ORG,
+    )
+    repo_md = render("common/.openhands/microagents/repo.md.j2", **ctx)
+    extra_tpl_name = ".openhands/microagents/repo.extra.md.j2"
+    extra_path = YMIR_ROOT / "stacks" / primary_stack / "templates" / extra_tpl_name
+    if extra_path.exists():
+        extra_ctx = {k: v for k, v in ctx.items() if k != "stack"}
+        repo_md += "\n" + render(extra_tpl_name, stack=primary_stack, **extra_ctx)
+    _write(project_dir / ".openhands" / "microagents" / "repo.md", repo_md)
+    click.echo(f"Updated {project}/.openhands/microagents/repo.md")
+
+
+# ---------------------------------------------------------------------------
+# sync-workspace-microagent
+# ---------------------------------------------------------------------------
+
+@cli.command("sync-workspace-microagent")
+def sync_workspace_microagent() -> None:
+    """Re-render the workspace-level repo.md with current project list and push to Albert."""
+    content = _render_workspace_repo()
+    dest = PROJECTS_ROOT / ".openhands" / "microagents" / "repo.md"
+    _write(dest, content)
+    click.echo("Updated workspace/.openhands/microagents/repo.md")
+    # Push to Albert if configured — use scp+sudo because the dir is owned by dev:root
+    if WORKSPACE_HOST and WORKSPACE_PATH:
+        remote = f"{WORKSPACE_USER}@{WORKSPACE_HOST}"
+        tmp = "/tmp/_workspace_repo_md"
+        scp = subprocess.run([
+            "scp", "-i", WORKSPACE_SSH_KEY, "-o", "StrictHostKeyChecking=no",
+            str(dest), f"{remote}:{tmp}",
+        ])
+        if scp.returncode == 0:
+            mv = subprocess.run([
+                "ssh", "-i", WORKSPACE_SSH_KEY, "-o", "StrictHostKeyChecking=no", remote,
+                f"sudo cp {tmp} {WORKSPACE_PATH}/.openhands/microagents/repo.md && "
+                f"sudo chown dev:root {WORKSPACE_PATH}/.openhands/microagents/repo.md",
+            ])
+            if mv.returncode == 0:
+                click.echo(f"  ✓ Pushed to {WORKSPACE_HOST}:{WORKSPACE_PATH}/.openhands/microagents/repo.md")
+                return
+        click.echo("  Warning: push to Albert failed", err=True)
 
 
 # ---------------------------------------------------------------------------
