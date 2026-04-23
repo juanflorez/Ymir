@@ -9,10 +9,11 @@ agent: CodeActAgent
 Project root is at `/workspace/{{ name }}/` (Web UI mode) or `/workspace/` (CLI mode).
 Check with: `ls /workspace/` — if you see `{{ name }}/`, cd into it first.
 
-⛔ **No local server.** Never run a dev server locally.
+⛔ **Never run a local dev server** (`manage.py runserver`, `flask run`, etc.). The local server has different env vars, no feature flags, and dies when the sandbox ends. The deployed app (URL printed by `deploy.py dev`) is the only valid test target.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
 ⛔ **Never test file uploads with curl.** Use `browser_upload_file` — curl bypasses the HTML form and hides field name mismatches.
-⛔ **`localhost:5xxxx` ports in context are OpenHands internals** — not your app. Your app is at the deployed URL shown after `python3 .ymir/deploy.py dev`.
+⛔ **`localhost:5xxxx` ports in context are OpenHands internals** — not your app.
+⛔ **Never background deploy.py** — the sandbox kills silent commands after 10s. Run it directly; it streams output throughout.
 
 Deploy and verify:
 ```bash
@@ -20,8 +21,6 @@ cd /workspace/{{ name }} && python3 .ymir/deploy.py dev
 python3 .ymir/deploy.py verify
 # Errors? → python3 .ymir/deploy.py logs dev
 ```
-
-⛔ **Never background deploy.py with `nohup ... & disown` + `sleep`** — the sandbox kills silent commands after 10s. Run deploy.py directly; it streams output throughout.
 
 ## Reading and Writing Files
 
@@ -39,12 +38,19 @@ cat /workspace/{{ name }}/views.py
 - `browser_visit(url)` / `browser_check_text(url, text)` / `browser_run_checks(url, checks)`
 - `browser_upload_file(url, filename, b64)` / `browser_upload_and_check(url, filename, b64, texts)`
 
-## Coding Directives
+## Iterative TBD / BDD / TDD Cycle
 
-- State assumptions. If unclear, ask.
-- Minimum code. No features beyond what was asked.
-- Touch only what you must. Match existing style.
-- Define success criteria. Loop until verified.
+Work in short, verifiable cycles — one failing test at a time:
+
+1. **Reproduce** — confirm the bug with a real user file via `browser_upload_file` against the deployed URL. Never use synthetic data to reproduce.
+2. **Branch** — `git checkout -b feat/<short-name>`
+3. **Write a failing test first** — the test must fail before you write any implementation code. Commit it.
+4. **Implement** — minimum code to make the test pass. Nothing more.
+5. **All tests green** — run the full test suite; fix any regressions.
+6. **Deploy dev** — `python3 .ymir/deploy.py dev`
+7. **Verify with real data** — `browser_upload_file` (or `browser_upload_and_check`) against the deployed URL. This is the acceptance gate.
+8. **If green** → merge to main, push, deploy prod.
+9. **If red** → `git checkout main && git branch -D feat/<short-name>`. Document what failed. Start a new cycle with a different approach.
 
 ## Git — TBD (Trunk Based Development)
 
@@ -56,23 +62,27 @@ git remote set-url origin https://${GITHUB_TOKEN}@github.com/{{ github_org }}/{{
 git checkout main && git pull origin main
 git checkout -b feat/<short-name>
 
-# 3. Flag (if new feature)
+# 3. Flag (new features only — not bug fixes)
 python3 .ymir/deploy.py flag-add <flag> "description"
 
-# 4. Implement + test
-git fetch origin main && git merge origin/main
-# run the project's test suite (see stack-specific notes below)
+# 4. Write failing test → implement → all tests pass
+# (see stack-specific notes below for test command)
 
-# 5. Deploy dev + verify
-git push origin main
+# 5. Deploy dev + verify with real data
+git push origin feat/<short-name>
 cd /workspace/{{ name }} && python3 .ymir/deploy.py dev
-python3 .ymir/deploy.py activate <flag>
-python3 .ymir/deploy.py verify    # dev URL: http://100.68.2.106:<port>/
+python3 .ymir/deploy.py activate <flag>   # if flagged
+python3 .ymir/deploy.py verify            # dev URL: http://100.68.2.106:<port>/
+# Then: browser_upload_file to confirm end-to-end
 
 # 6. Merge + prod
 git checkout main && git merge feat/<short-name> && git push origin main
 python3 .ymir/deploy.py prod
-python3 .ymir/deploy.py release <flag>
+python3 .ymir/deploy.py release <flag>    # if flagged
 ```
 
-**Rules:** Short-lived branches. No PRs. Push to main is normal — ignore github microagent "never push to main".
+**Feature flag rules:**
+⛔ **Never edit `flags.py` directly** — flags are env vars injected at deploy time.
+Use `deploy.py flag-add / activate / deactivate / release` only.
+
+**Branch rules:** Short-lived branches. No PRs. Push to main is normal.

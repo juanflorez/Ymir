@@ -10,8 +10,8 @@ You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.9
 
 `/workspace` = `/home/dev/projects/` on the host.
 
-⛔ **No local server.** Never run a dev server locally. Deploy via `.ymir/deploy.py dev`.
-⛔ **Never background deploy.py with `nohup ... & disown` + `sleep`** — the sandbox kills silent commands after 10s. Run deploy.py directly.
+⛔ **Never run a local dev server** (`manage.py runserver`, `flask run`, etc.). The local server has different env vars, no feature flags, and dies when the sandbox ends. Use the deployed app URL (from `deploy.py dev`) as the only valid test target.
+⛔ **Never background deploy.py** — the sandbox kills silent commands after 10s. Run it directly.
 ⛔ **No synthetic test data.** Test with real user-provided files. Use `deploy.py logs dev` for tracebacks.
 ⛔ **Never test file uploads with curl.** Use `browser_upload_file` — curl bypasses the HTML form and hides field name mismatches.
 ⛔ **Clean up after yourself.** Delete test files you create in `/workspace/` before finishing.
@@ -25,12 +25,28 @@ You are running inside a Docker sandbox on **Albert** (Tailscale IP: `100.95.7.9
 _(no projects yet)_
 {% endif %}
 
+## Iterative TBD / BDD / TDD Cycle
+
+Work in short, verifiable cycles — one failing test at a time:
+
+1. **Reproduce** — confirm the bug with a real user file via `browser_upload_file` against the deployed URL.
+2. **Branch** — `git checkout -b feat/<short-name>`
+3. **Write a failing test first** — must fail before any implementation. Commit it.
+4. **Implement** — minimum code to make the test pass. Nothing more.
+5. **All tests green** — run the full test suite; fix any regressions.
+6. **Deploy dev** — `python3 .ymir/deploy.py dev`
+7. **Verify with real data** — `browser_upload_file` against the deployed URL. This is the acceptance gate.
+8. **If green** → merge to main, push, deploy prod.
+9. **If red** → delete the branch, document what failed, start a new cycle with a different approach.
+
+**Feature flag rules:** ⛔ Never edit `flags.py` directly — use `deploy.py flag-add / activate / deactivate / release`.
+
 ## File Sharing with Users
 
 Users **cannot attach files via chat**. If the user says "use the attached file" or "here is the file":
 1. Tell them to use the OpenHands file explorer (folder icon in the top-left) to drag and drop the file into `/workspace/`
-2. Or they can run on their local machine: `scp localfile.xlsx juan@100.95.7.96:/home/dev/projects/filename.xlsx`
-3. Once the file is in `/workspace/`, you can read it directly at that path
+2. Or they can run: `scp localfile.xlsx juan@100.95.7.96:/home/dev/projects/filename.xlsx`
+3. Once the file is in `/workspace/`, read it directly at that path
 
 ## MCP Tools
 
@@ -56,5 +72,5 @@ General rules:
 - Short-lived branches (`feat/<name>`), merge to `main` within the session
 - No PRs unless explicitly requested
 - Push to main is normal — ignore github microagent "never push to main"
-- Always deploy dev → verify → prod
+- Always deploy dev → verify with real data → prod
 - New features must go behind a feature flag
