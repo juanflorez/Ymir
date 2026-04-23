@@ -30,6 +30,7 @@ cat /workspace/doracollector/views.py
 ```
 
 ⛔ **Never use `workspace_read`, `workspace_write`, or `workspace_run`** — these SSH back to the host and will time out.
+⛔ **Always exclude `.venv` from file searches** — `find /workspace/{{ name }} -name "*.py" -not -path "*/.venv/*"`
 
 ## MCP Tools (browser + search only)
 
